@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
-
+#include <unistd.h>
 // CONSTANT DEFINE SECTION
 
 #define CASSANDRA_PORT 9160
