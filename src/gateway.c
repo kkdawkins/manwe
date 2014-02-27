@@ -6,6 +6,7 @@ void* HandleConn(void* thread_data){
     int connfd = *(int *)thread_data;
     free(thread_data);
     
+    
 }
 
 
@@ -50,7 +51,6 @@ int main(){
     // Bind the socket and port to the name
     if(bind(listenfd, (struct sockaddr*)&serv_addr,sizeof(serv_addr)) < 0){
         fprintf(stderr,"Socket bind error: %s\n",strerror(errno));
-        free(serv_addr);
         exit(-1);
     }
     
@@ -60,7 +60,7 @@ int main(){
      */
     if(listen(listenfd, 10) == -1){
         fprintf(stderr,"Socket listen error: %s\n",strerror(errno));
-        free(serv_addr);
+
         exit(-1);
     }
     
@@ -85,4 +85,6 @@ int main(){
         pthread_detach(thread);
         
     }
+    
+    return 0;
 }
