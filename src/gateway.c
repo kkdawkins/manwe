@@ -1,10 +1,38 @@
+/*
+ * gateway.c - Gateway for Cassandra
+ * CSC 652 - 2014
+ */
 #include "gateway.h"
 
 
 
 void* HandleConn(void* thread_data){
+    char *buf;
+    unsigned int data_length;
     int connfd = *(int *)thread_data;
+    
+    // Need to free asap
     free(thread_data);
+    
+    // Need to put in a loop
+    
+    // Step 1: Read the 4 byte header to get length
+    if(recv(connfd, (void *) &data_length, sizeof(data_length), NULL) < 0){
+        fprintf(stderr,"Error reading header length: %s\n",strerror(errno));
+        exit(-1);
+    }
+    
+    buf = malloc(data_length);
+    if(!buf){
+        fprintf(stderr, "Malloc failed during TCP recv\n");
+        exit(-1);
+    }
+    
+    // Step 2: Read that amount of data
+    if(recv(connfd, buf, data_length, NULL)  < 0){
+        fprintf(stderr,"Error reading TCP data: %s\n",strerror(errno));
+        exit(-1);
+    }
     
     
 }
@@ -40,10 +68,10 @@ int main(){
     memset(&serv_addr, '0', sizeof(serv_addr));
     
     serv_addr.sin_family = AF_INET;
+    
     /*
      * TODO: Is this correct? Accept *any* connections?
      */
-    
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(CASSANDRA_PORT);
     
@@ -56,7 +84,7 @@ int main(){
     
     // Listen for connections, with a backlog of 10
     /*
-     * TODO: Is 10 proper?
+     * TODO: Is 10 proper? Should we do more/less?
      */
     if(listen(listenfd, 10) == -1){
         fprintf(stderr,"Socket listen error: %s\n",strerror(errno));
