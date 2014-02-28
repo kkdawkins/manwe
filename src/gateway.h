@@ -10,6 +10,9 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <pcre.h>
 // CONSTANT DEFINE SECTION
 
 #define CASSANDRA_PORT 9160
+
+const char* prefix_cmd(char *cql_cmd);

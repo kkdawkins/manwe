@@ -116,3 +116,83 @@ int main(){
     
     return 0;
 }
+
+const char* prefix_cmd(char *cql_cmd){
+	pcre *reCompiled;
+        pcre_extra *pcreExtra;
+        const char *pcreErrorStr;
+        int pcreErrorOffset;
+        int subStrVec[30];
+        const char *psubStrMatchStr;
+        int i;
+        int pcreExecRet;
+        char *aStrRegex;
+        char **aLineToMatch;
+
+	aStrRegex = "(.*)(hello)+";
+        printf("Regex to use: %s\n", aStrRegex);
+
+	reCompiled = pcre_compile(aStrRegex, 0, &pcreErrorStr,
+                                 &pcreErrorOffset, NULL );
+
+        if(reCompiled == NULL){
+                printf("ERROR: Compilation failed: '%s'", pcreErrorStr);
+                exit(1);
+        }
+
+        // Regex optimization
+        pcreExtra = pcre_study(reCompiled, 0, &pcreErrorStr);
+        if(pcreErrorStr != NULL) {
+                printf("ERROR: Something went wrong in optimization attempt:'%s'\n", pcreErrorStr);
+                exit(1);
+        }
+
+	pcreExecRet = pcre_exec(reCompiled,
+                                        pcreExtra,
+                                        cql_cmd,
+                                        strlen(cql_cmd),
+                                        0,
+                                        0,
+                                        subStrVec,
+                                        30);
+	if(pcreExecRet < 0) {
+                switch(pcreExecRet){
+                case PCRE_ERROR_NOMATCH     :printf("String did not match\n");
+                                             break;
+                case PCRE_ERROR_NULL        :printf("Encountered null\n");
+                                             break;
+                case PCRE_ERROR_BADOPTION   :printf("A bad option was passed\n");
+                                             break;
+                case PCRE_ERROR_BADMAGIC    :printf("Magic number bad\n");
+                                             break;
+                case PCRE_ERROR_UNKNOWN_NODE:printf("Something bad in recompiled regex\n");
+                                             break;
+                case PCRE_ERROR_NOMEMORY    :printf("Ran out of memory\n");
+                                             break;
+                default                     :printf("Unknown error\n");
+                                             break;
+         }
+        }
+	else{
+         printf("######A match was found#######\n");
+
+         if(pcreExecRet == 0){
+           printf("Too many substrings for substring vector\n");
+           pcreExecRet = 10;
+                }
+
+        for(i=0;i<pcreExecRet;i++){
+          pcre_get_substring(*aLineToMatch, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
+          printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
+        }
+
+        pcre_free_substring(psubStrMatchStr);
+        }
+	 pcre_free(reCompiled);
+
+        if(pcreExtra != NULL){
+                pcre_free(pcreExtra);
+        }
+
+	return psubStrMatchStr;
+}
