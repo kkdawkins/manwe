@@ -17,7 +17,7 @@ void* HandleConn(void* thread_data){
     // Need to put in a loop
     
     // Step 1: Read the 4 byte header to get length
-    if(recv(connfd, (void *) &data_length, sizeof(data_length), NULL) < 0){
+    if(recv(connfd, (void *) &data_length, sizeof(data_length), 0) < 0){
         fprintf(stderr,"Error reading header length: %s\n",strerror(errno));
         exit(-1);
     }
@@ -29,7 +29,7 @@ void* HandleConn(void* thread_data){
     }
     
     // Step 2: Read that amount of data
-    if(recv(connfd, buf, data_length, NULL)  < 0){
+    if(recv(connfd, buf, data_length, 0)  < 0){
         fprintf(stderr,"Error reading TCP data: %s\n",strerror(errno));
         exit(-1);
     }
