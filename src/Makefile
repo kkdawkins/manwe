@@ -1,7 +1,7 @@
 CC = gcc
 VALGRIND = valgrind
 
-CFLAGS = -Wall -Wextra -Werror -O3 -lpthread
+CFLAGS = -Wall -Wextra -Werror -O3 -lpthread -lpcre
 DEBUG_FLAGS = -g -O0 -DDEBUG #Define the DEBUG flag at compile time
 
 

@@ -141,10 +141,9 @@ char* prefix_cmd(char *cql_cmd, char *prefix){
         int i;
         int pcreExecRet;
         char *aStrRegex;
-        char **aLineToMatch;
         //Regex to match
 	aStrRegex = "USE[ ]+(.*);";
-        printf("Regex to use: %s\n", aStrRegex);
+        printf("Regex to use: %s, %s\n", aStrRegex, prefix);
 
 	reCompiled = pcre_compile(aStrRegex, 0, &pcreErrorStr,
                                  &pcreErrorOffset, NULL );
@@ -196,7 +195,7 @@ char* prefix_cmd(char *cql_cmd, char *prefix){
                 }
 
         for(i=0;i<pcreExecRet;i++){
-          pcre_get_substring(*aLineToMatch, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
+          pcre_get_substring(cql_cmd, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
           printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
 	  if(i){
                 strcpy(p_string, psubStrMatchStr);
