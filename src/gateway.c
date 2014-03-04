@@ -2,9 +2,19 @@
  * gateway.c - Gateway for Cassandra
  * CSC 652 - 2014
  */
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pcre.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #include "gateway.h"
-
-
 
 void* HandleConn(void* thread_data){
     char *buf;
@@ -34,7 +44,8 @@ void* HandleConn(void* thread_data){
         exit(-1);
     }
     
-    
+    //TODO cleanup thread once done with connection
+    return NULL;
 }
 
 
