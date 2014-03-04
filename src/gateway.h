@@ -5,7 +5,6 @@
 // SYSTEM DEFINE SECTION
 //
 
-
 #include <stdint.h>
 
 #if DEBUG
@@ -33,7 +32,7 @@ typedef struct {
   int8_t  stream; //Per doc, this is a signed byte
   uint8_t opcode;
   int32_t length; //Per doc, looks like it is signed
-  void    *body;
+  //void    *body; The body will need to be allocated right after the fixed length header
 } cql_packet_t;
 
 //Define constants for the different fields in a CQL packet
@@ -80,6 +79,8 @@ typedef struct {
 #define CQL_ERROR_ALREADY_EXISTS        0x2400
 #define CQL_ERROR_UNPREPARED            0x2500
 
+void* HandleConn(void* thread_data);
 char* prefix_cmd(char *cql_cmd, char *prefix);
+void prepend(char* s, const char* t);
 
 #endif
