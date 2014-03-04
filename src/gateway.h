@@ -80,6 +80,6 @@ typedef struct {
 #define CQL_ERROR_ALREADY_EXISTS        0x2400
 #define CQL_ERROR_UNPREPARED            0x2500
 
-const char* prefix_cmd(char *cql_cmd);
+char* prefix_cmd(char *cql_cmd, char *prefix);
 
 #endif

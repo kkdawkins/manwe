@@ -16,6 +16,8 @@
 
 #include "gateway.h"
 
+void prepend(char* s, const char* t);
+
 void* HandleConn(void* thread_data){
     char *buf;
     unsigned int data_length;
@@ -128,19 +130,20 @@ int main(){
     return 0;
 }
 
-const char* prefix_cmd(char *cql_cmd){
+char* prefix_cmd(char *cql_cmd, char *prefix){
 	pcre *reCompiled;
         pcre_extra *pcreExtra;
         const char *pcreErrorStr;
         int pcreErrorOffset;
         int subStrVec[30];
         const char *psubStrMatchStr;
+	char *p_string = (char *)malloc(100);
         int i;
         int pcreExecRet;
         char *aStrRegex;
         char **aLineToMatch;
-
-	aStrRegex = "(.*)(hello)+";
+        //Regex to match
+	aStrRegex = "USE[ ]+(.*);";
         printf("Regex to use: %s\n", aStrRegex);
 
 	reCompiled = pcre_compile(aStrRegex, 0, &pcreErrorStr,
@@ -195,8 +198,13 @@ const char* prefix_cmd(char *cql_cmd){
         for(i=0;i<pcreExecRet;i++){
           pcre_get_substring(*aLineToMatch, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
           printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
-        }
+	  if(i){
+                strcpy(p_string, psubStrMatchStr);
+                prepend(p_string, "USE 123abc");
+                printf("Result of processing: %s\n", p_string);
+          }
 
+        }
         pcre_free_substring(psubStrMatchStr);
         }
 	 pcre_free(reCompiled);
@@ -205,5 +213,19 @@ const char* prefix_cmd(char *cql_cmd){
                 pcre_free(pcreExtra);
         }
 
-	return psubStrMatchStr;
+	return p_string;
 }
+
+void prepend(char* s, const char* t)
+{
+    size_t len = strlen(t);
+    size_t i;
+
+    memmove(s + len, s, len + 1);
+
+    for (i = 0; i < len; ++i)
+    {
+        s[i] = t[i];
+    }
+}
+
