@@ -281,6 +281,17 @@ char* prefix_cmd(char *cql_cmd, char *prefix){
         int i;
         int pcreExecRet;
         char *aStrRegex;
+
+	//chomp newline character and replace whenever found
+	int length = strlen(cql_cmd);
+	int j = 0;
+	while(j < length){
+		if(cql_cmd[j] == '\n'){
+			cql_cmd[j] = ' ';
+		}
+		j++;
+	}
+
         //Regex to match
 	aStrRegex = "USE[ ]+(.*);";
         printf("Regex to use: %s, %s\n", aStrRegex, prefix);
