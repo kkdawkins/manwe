@@ -2,7 +2,7 @@
  * gateway.c - Gateway for Cassandra
  * CSC 652 - 2014
  */
-
+extern "C" {
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +17,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "gateway.h"
+}
+#include "gateway.hpp"
 
 /*
  * Main processing loop of gateway. Spawns individual threads to handle each incoming TCP connection from a client.

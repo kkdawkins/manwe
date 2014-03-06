@@ -4,14 +4,14 @@
 //
 // SYSTEM DEFINE SECTION
 //
-
+extern "C" {
 #include <stdint.h>
 
 #if DEBUG
 //Debugging enables lots of asserts in the code that are normally not included.
 #include <assert.h>
 #endif
-
+}
 //
 // CONSTANT DEFINE SECTION
 //
