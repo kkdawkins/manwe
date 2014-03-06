@@ -7,7 +7,7 @@ DEBUG_FLAGS = -g -O0 -DDEBUG #Define the DEBUG flag at compile time
 
 all:	manwe
 
-manwe:	gateway.hpp gateway.cpp
+manwe:	gateway.hpp gateway.cpp 
 	$(CC) -o gateway gateway.cpp $(CFLAGS)
 
 debug:

@@ -1,5 +1,5 @@
 /*
- * gateway.c - Gateway for Cassandra
+ * gateway.cpp - Gateway for Cassandra
  * CSC 652 - 2014
  */
 extern "C" {
@@ -20,6 +20,7 @@ extern "C" {
 }
 #include "gateway.hpp"
 
+// #include "cassandra.hpp"
 /*
  * Main processing loop of gateway. Spawns individual threads to handle each incoming TCP connection from a client.
  * Return 0 on success (never reached, since it will listen for connections until killed), 1 on error.
@@ -380,15 +381,8 @@ void prepend(char* s, const char* t)
     }
 }
 
-/*
- * Returns true on success, false on failure (auth or otherwise)
- * Assume that internalToken is already malloc-ed in calling function
- * On failure, internalToken is NULL and false is returned
- 
-bool checkToken(char *inToken, char *internalToken){
-    
-}
-*/
+
+
 
 
 
