@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
         connfd = accept(listenfd, (struct sockaddr*)NULL, NULL);
         
         // Must free in function, now threads have their own conn addr.
-        thread_data = malloc(sizeof(int));
+        thread_data = (int*)malloc(sizeof(int));
         *thread_data = connfd;
         
         if (pthread_create(&thread, &attr, HandleConn, (void *)thread_data) != 0) {
@@ -123,19 +123,19 @@ void* HandleConn(void* thread_data) {
     pthread_t tid = pthread_self();
 
     #if DEBUG
-    printf("%u: Thread spawned.\n", (uint32_t)tid);
+    printf("%lu: Thread spawned.\n", (unsigned long)tid);
     #endif
 
     // Before entering the processing loop, we need to establish a connection to the real Cassandra
 
     #if DEBUG
-    printf("%u: Establishing connection to Cassandra listening on 127.0.0.1:%d.\n", (uint32_t)tid, CASSANDRA_PORT + 1);
+    printf("%lu: Establishing connection to Cassandra listening on 127.0.0.1:%d.\n", (unsigned long)tid, CASSANDRA_PORT + 1);
     #endif
 
     struct sockaddr_in cassandra_addr;
     int cassandrafd = socket(AF_INET, SOCK_STREAM, 0);
     if (cassandrafd < 0) {
-        fprintf(stderr, "%u: Socket creation error: %s\n", (uint32_t)tid, strerror(errno));
+        fprintf(stderr, "%lu: Socket creation error: %s\n", (unsigned long)tid, strerror(errno));
         exit(1);
     }
 
@@ -147,14 +147,14 @@ void* HandleConn(void* thread_data) {
 
     // Bind the socket and port to the name
     if (connect(cassandrafd, (struct sockaddr*)&cassandra_addr, sizeof(cassandra_addr)) < 0) {
-        fprintf(stderr, "%u: Socket bind error: %s\n", (uint32_t)tid, strerror(errno));
+        fprintf(stderr, "%lu: Socket bind error: %s\n", (unsigned long)tid, strerror(errno));
         exit(1);
     }
 
     // Now, enter the packet processing loop
 
     #if DEBUG
-    printf("%u: Entering the packet processing loop.\n", (uint32_t)tid);
+    printf("%lu: Entering the packet processing loop.\n", (unsigned long)tid);
     #endif
 
     cql_packet_t *packet;
@@ -176,22 +176,22 @@ void* HandleConn(void* thread_data) {
         if (bytesAvail > 0) {
 
             #if DEBUG
-            printf("%u: Processing packet from client.\n", (uint32_t)tid);
+            printf("%lu: Processing packet from client.\n", (unsigned long)tid);
             #endif
 
             // Get packet from client
-            packet = malloc(header_len);
+            packet = (cql_packet_t *)malloc(header_len);
             // FIXME need to come back and do proper sanity checks on data from client (ie, verify proper CQL version, etc)
             if (recv(connfd, packet, header_len, 0) < 0) { //The CQL header is 8 bytes
-                fprintf(stderr, "%u: Error reading packet header from client: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error reading packet header from client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
             body_len = ntohl(packet->length);
 
             // Allocate more memory for rest of packet
-            void *newpacket = realloc(packet, header_len + body_len);
+            cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
             if (newpacket == NULL) {
-                fprintf(stderr, "%u: Filed to realloc memory for packet body!\n", (uint32_t)tid);
+                fprintf(stderr, "%lu: Filed to realloc memory for packet body!\n", (unsigned long)tid);
                 exit(1);
             }
             else {
@@ -201,7 +201,7 @@ void* HandleConn(void* thread_data) {
 
             // Read in body of packet
             if (recv(connfd, packet + header_len, body_len, 0) < 0) { //Get the rest of the body
-                fprintf(stderr, "%u: Error reading packet body from client: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error reading packet body from client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
@@ -209,7 +209,7 @@ void* HandleConn(void* thread_data) {
 
             // Send packet to Cassandra
             if (send(cassandrafd, packet, header_len + body_len, 0) < 0) { //Packet total size is header + body => 8 + packet->length
-                fprintf(stderr, "%u: Error sending packet to Cassandra: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error sending packet to Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
@@ -221,21 +221,21 @@ void* HandleConn(void* thread_data) {
         if (bytesAvail > 0) {
 
             #if DEBUG
-            printf("%u: Processing packet from Cassandra.\n", (uint32_t)tid);
+            printf("%lu: Processing packet from Cassandra.\n", (unsigned long)tid);
             #endif
 
             // Get packet back from Cassandra. We assume Cassandra will always give us properly formed packets.
-            packet = malloc(header_len);
+            packet = (cql_packet_t *)malloc(header_len);
             if (recv(cassandrafd, packet, header_len, 0) < 0) { //The CQL header is 8 bytes
-                fprintf(stderr, "%u: Error reading packet header from Cassandra: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error reading packet header from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
             body_len = ntohl(packet->length);
 
             // Allocate more memory for rest of packet
-            void *newpacket = realloc(packet, header_len + body_len);
+            cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
             if (newpacket == NULL) {
-                fprintf(stderr, "%u: Filed to realloc memory for packet body!\n", (uint32_t)tid);
+                fprintf(stderr, "%lu: Filed to realloc memory for packet body!\n", (unsigned long)tid);
                 exit(1);
             }
             else {
@@ -245,7 +245,7 @@ void* HandleConn(void* thread_data) {
 
             // Read in body of packet
             if (recv(cassandrafd, packet + header_len, body_len, 0) < 0) { //Get the rest of the body
-                fprintf(stderr, "%u: Error reading packet body from Cassandra: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
@@ -253,7 +253,7 @@ void* HandleConn(void* thread_data) {
 
             // Send packet to client
             if (send(connfd, packet, header_len + body_len, 0) < 0) { //Packet total size is header + body => 8 + packet->length
-                fprintf(stderr, "%u: Error sending packet to client: %s\n", (uint32_t)tid, strerror(errno));
+                fprintf(stderr, "%lu: Error sending packet to client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
@@ -262,7 +262,7 @@ void* HandleConn(void* thread_data) {
     }
 
     #if DEBUG
-    printf("%u: Client connection terminated, thread dying.\n", (uint32_t)tid);
+    printf("%lu: Client connection terminated, thread dying.\n", (unsigned long)tid);
     #endif
 
     // Properly close connection to Cassandra server
@@ -281,7 +281,7 @@ char* prefix_cmd(char *cql_cmd, char *prefix){
 	char *p_string = (char *)malloc(100);
         int i;
         int pcreExecRet;
-        char *aStrRegex;
+        const char *aStrRegex;
 
 	//chomp newline character and replace whenever found
 	int length = strlen(cql_cmd);
@@ -384,11 +384,11 @@ void prepend(char* s, const char* t)
  * Returns true on success, false on failure (auth or otherwise)
  * Assume that internalToken is already malloc-ed in calling function
  * On failure, internalToken is NULL and false is returned
- */
+ 
 bool checkToken(char *inToken, char *internalToken){
     
 }
-
+*/
 
 
 
