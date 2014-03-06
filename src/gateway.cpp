@@ -379,3 +379,22 @@ void prepend(char* s, const char* t)
     }
 }
 
+/*
+ * Returns true on success, false on failure (auth or otherwise)
+ * Assume that internalToken is already malloc-ed in calling function
+ * On failure, internalToken is NULL and false is returned
+ */
+bool checkToken(char *inToken, char *internalToken){
+    
+}
+
+
+
+
+
+
+
+
+
+
+

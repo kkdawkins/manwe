@@ -1,4 +1,4 @@
-CC = gcc
+CC = g++
 VALGRIND = valgrind
 
 CFLAGS = -Wall -Wextra -Werror -O3 -lpthread -lpcre
