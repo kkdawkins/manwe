@@ -203,12 +203,13 @@ void* HandleConn(void* thread_data) {
             }
 
             // Now, read in the remaining 7 bytes of the header.
-            if (recv(connfd, ((void *)packet) + 1, 7, 0) < 0) { //The remainder of the CQL header
+            if (recv(connfd, ((char *)packet) + 1, 7, 0) < 0) { //The remainder of the CQL header
                 fprintf(stderr, "%u: Error reading remainder of header from client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
             if (ntohs(packet->stream) <= 0) { // Client request stream ids must be postitive
-                SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, "Invalid stream id");
+                char msg[] = "Invalid stream id";
+                SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
 
                 free(packet);
                 close(connfd);
@@ -249,7 +250,7 @@ void* HandleConn(void* thread_data) {
 
             // Modify packet (if needed)
             if (ntohs(packet->opcode) == CQL_OPCODE_STARTUP) { // Handle STARTUP packet here, since we may need to set variables for the connection regarding compression
-                cql_string_map_t *sm = ReadStringMap((void *)packet + header_len);
+                cql_string_map_t *sm = ReadStringMap((char *)packet + header_len);
                 cql_string_map_t *head = sm;
 
                 while (sm != NULL) {
@@ -273,7 +274,7 @@ void* HandleConn(void* thread_data) {
                     }
                 }
 
-                uint32_t new_len = WriteStringMap(head, (void *)packet + header_len);
+                uint32_t new_len = WriteStringMap(head, (char *)packet + header_len);
                 packet->length = htonl(new_len);
 
                 free(head);

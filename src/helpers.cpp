@@ -18,18 +18,18 @@
 /*
  * This method creates an appropriate CQL error packet to send on a specified socket. This does not close the socket before returning.
  */
-void SendCQLError(int sock, uint32_t tid, uint32_t err, char *msg) {
+void SendCQLError(int sock, uint32_t tid, uint32_t err, char* msg) {
     int p_len = sizeof(cql_packet_t) + 4 + 2 + strlen(msg); // Header + int + short + msg length
-    cql_packet_t *p = malloc(p_len);
+    cql_packet_t *p = (cql_packet_t *)malloc(p_len);
     memset(p, 0, p_len);
 
     p->version = htons(CQL_V2_RESPONSE);
     p->opcode = htons(CQL_OPCODE_ERROR);
     p->length = htonl(6 + strlen(msg));
-    memset((void *)p + sizeof(cql_packet_t), htonl(err), 1);
+    memset(p + sizeof(cql_packet_t), htonl(err), 1);
     uint16_t str_len = htons(strlen(msg));
-    memcpy((void *)p + sizeof(cql_packet_t) + 4, &str_len, 1);
-    memcpy((void *)p + sizeof(cql_packet_t) + 6, msg, strlen(msg));
+    memcpy(p + sizeof(cql_packet_t) + 4, &str_len, 1);
+    memcpy(p + sizeof(cql_packet_t) + 6, msg, strlen(msg));
 
     if (send(sock, p, p_len, 0) < 0) { // Send the packet
         fprintf(stderr, "%u: Error sending error packet to client: %s\n", tid, strerror(errno));
@@ -40,7 +40,7 @@ void SendCQLError(int sock, uint32_t tid, uint32_t err, char *msg) {
 /*
  * Coverts a CQL string map into a linked list of key/value strings.
  */
-cql_string_map_t * ReadStringMap(void *buf) {
+cql_string_map_t * ReadStringMap(char *buf) {
     if (buf == NULL) {
         return NULL;
     }
@@ -52,7 +52,7 @@ cql_string_map_t * ReadStringMap(void *buf) {
     int offset = 2; // Keep track as we move through the buffer
     uint16_t str_len = 0; // Length of each string we process
 
-    cql_string_map_t *sm = malloc(sizeof(cql_string_map_t));
+    cql_string_map_t *sm = (cql_string_map_t *)malloc(sizeof(cql_string_map_t));
     cql_string_map_t *head = sm;
 
     while (num_pairs > 0) {
@@ -60,7 +60,7 @@ cql_string_map_t * ReadStringMap(void *buf) {
         memcpy(&str_len, buf + offset, 2);
         offset += 2;
         str_len = ntohs(str_len);
-        sm->key = malloc(str_len + 1);
+        sm->key = (char *)malloc(str_len + 1);
         memset(sm->key, 0, str_len + 1);
         memcpy(sm->key, buf + offset, str_len);
         offset += str_len;
@@ -69,7 +69,7 @@ cql_string_map_t * ReadStringMap(void *buf) {
         memcpy(&str_len, buf + offset, 2);
         offset += 2;
         str_len = ntohs(str_len);
-        sm->value = malloc(str_len + 1);
+        sm->value = (char *)malloc(str_len + 1);
         memset(sm->value, 0, str_len + 1);
         memcpy(sm->value, buf + offset, str_len);
         offset += str_len;
@@ -77,7 +77,7 @@ cql_string_map_t * ReadStringMap(void *buf) {
         num_pairs--;
 
         if (num_pairs > 0) {
-            sm->next = malloc(sizeof(cql_string_map_t));
+            sm->next = (cql_string_map_t *)malloc(sizeof(cql_string_map_t));
             sm = sm->next;
         }
     }
@@ -88,7 +88,7 @@ cql_string_map_t * ReadStringMap(void *buf) {
 /*
  * Coverts a linked list of key/value strings into the CQL string map format. Returns size of new buffer.
  */
-uint32_t WriteStringMap(cql_string_map_t *sm, void *buf) {
+uint32_t WriteStringMap(cql_string_map_t *sm, char *buf) {
     if (sm == NULL) {
         buf = NULL;
         return 0;
@@ -107,7 +107,7 @@ uint32_t WriteStringMap(cql_string_map_t *sm, void *buf) {
         sm = sm->next;
     }
 
-    buf = malloc(buf_size);
+    buf = (char *)malloc(buf_size);
     num_pairs = htons(num_pairs);
     memcpy(buf, &num_pairs, 2);
 
