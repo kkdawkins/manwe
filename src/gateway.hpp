@@ -45,6 +45,10 @@ typedef struct {
 #define CQL_FLAG_COMPRESSION 0x01
 #define CQL_FLAG_TRACING     0x02
 
+#define CQL_COMPRESSION_NONE   0x00
+#define CQL_COMPRESSION_LZ4    0x01
+#define CQL_COMPRESSION_SNAPPY 0x02
+
 #define CQL_OPCODE_ERROR          0x00
 #define CQL_OPCODE_STARTUP        0x01
 #define CQL_OPCODE_READY          0x02

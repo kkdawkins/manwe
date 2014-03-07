@@ -4,11 +4,16 @@ VALGRIND = valgrind
 CFLAGS = -Wall -Wextra -Werror -O3 -lpthread -lpcre
 DEBUG_FLAGS = -g -O0 -DDEBUG #Define the DEBUG flag at compile time
 
+all:	gateway
 
-all:	manwe
+gateway:	gateway.o helpers.o
+	$(CC) -o gateway helpers.o gateway.o $(CFLAGS)
 
-manwe:	gateway.hpp gateway.cpp 
-	$(CC) -o gateway gateway.cpp $(CFLAGS)
+gateway.o:	gateway.hpp gateway.cpp
+	$(CC) -c gateway.cpp $(CFLAGS)
+
+helpers.o:	helpers.hpp helpers.cpp
+	$(CC) -c helpers.cpp $(CFLAGS)
 
 debug:
 	$(MAKE) clean

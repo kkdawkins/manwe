@@ -19,6 +19,7 @@ extern "C" {
 
 }
 #include "gateway.hpp"
+#include "helpers.hpp"
 
 // #include "cassandra.hpp"
 /*
@@ -158,10 +159,11 @@ void* HandleConn(void* thread_data) {
     printf("%lu: Entering the packet processing loop.\n", (unsigned long)tid);
     #endif
 
-    cql_packet_t *packet;
-    uint32_t header_len = sizeof(cql_packet_t);
-    uint32_t body_len;
-    int bytesAvail = 0;
+    cql_packet_t *packet = NULL;
+    uint8_t header_len = sizeof(cql_packet_t);
+    uint32_t body_len = 0;
+    int compression_type = CQL_COMPRESSION_NONE;
+    int bytes_avail = 0;
 
     while (1) {
         // At the top of the loop, we are expecting the start of another CQL packet. If it doesn't look right, send back an error and close the connection.
@@ -173,8 +175,8 @@ void* HandleConn(void* thread_data) {
 
         // Test to see if any bytes have arrived from the client
         // FIXME when client closes connection, we should break out of this loop, otherwise we may crash when reading a closed socket!
-        ioctl(connfd, FIONREAD, &bytesAvail);
-        if (bytesAvail > 0) {
+        ioctl(connfd, FIONREAD, &bytes_avail);
+        if (bytes_avail > 0) {
 
             #if DEBUG
             printf("%lu: Processing packet from client.\n", (unsigned long)tid);
@@ -182,17 +184,43 @@ void* HandleConn(void* thread_data) {
 
             // Get packet from client
             packet = (cql_packet_t *)malloc(header_len);
-            // FIXME need to come back and do proper sanity checks on data from client (ie, verify proper CQL version, etc)
-            if (recv(connfd, packet, header_len, 0) < 0) { //The CQL header is 8 bytes
-                fprintf(stderr, "%lu: Error reading packet header from client: %s\n", (unsigned long)tid, strerror(errno));
+
+            // Perform some basic sanity checks to verify this looks like a CQL packet
+
+            // The first byte must be CQL_V2_REQUEST. Version 1 of the CQL protocol isn't supported by our gateway.
+            if (recv(connfd, packet, 1, 0) < 0) { //The first byte of the potential CQL header
+                fprintf(stderr, "%u: Error reading first byte from client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
+            if (ntohs(packet->version) != CQL_V2_REQUEST) { // Verify version
+                #if DEBUG
+                printf("%u: First byte from client is not CQL_V2_REQUEST, closing connections and killing thread.\n", (uint32_t)tid);
+                #endif
+
+                free(packet);
+                close(connfd);
+                break;
+            }
+
+            // Now, read in the remaining 7 bytes of the header.
+            if (recv(connfd, ((void *)packet) + 1, 7, 0) < 0) { //The remainder of the CQL header
+                fprintf(stderr, "%u: Error reading remainder of header from client: %s\n", (uint32_t)tid, strerror(errno));
+                exit(1);
+            }
+            if (ntohs(packet->stream) <= 0) { // Client request stream ids must be postitive
+                SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, "Invalid stream id");
+
+                free(packet);
+                close(connfd);
+                break;
+            }
+
             body_len = ntohl(packet->length);
 
             // Allocate more memory for rest of packet
             cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
             if (newpacket == NULL) {
-                fprintf(stderr, "%lu: Filed to realloc memory for packet body!\n", (unsigned long)tid);
+                fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
                 exit(1);
             }
             else {
@@ -201,15 +229,61 @@ void* HandleConn(void* thread_data) {
             }
 
             // Read in body of packet
-            if (recv(connfd, packet + header_len, body_len, 0) < 0) { //Get the rest of the body
+            if (recv(connfd, packet + header_len, body_len, 0) < 0) { // Get the rest of the body
                 fprintf(stderr, "%lu: Error reading packet body from client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
-            // Modify packet (if needed)
+            // If the packet is compressed, decompress the body. Note that we always send uncompressed packets to Cassandra itself, since
+            // we're communicating directly on the same host.
+            if (ntohs(packet->flags) & CQL_FLAG_COMPRESSION) {
+                if (compression_type == CQL_COMPRESSION_LZ4) {
+                    // TODO
+                }
+                else if (compression_type == CQL_COMPRESSION_SNAPPY) {
+                    // TODO
+                }
 
-            // Send packet to Cassandra
-            if (send(cassandrafd, packet, header_len + body_len, 0) < 0) { //Packet total size is header + body => 8 + packet->length
+                packet->flags = htons(ntohs(packet->flags) & ~CQL_FLAG_COMPRESSION);
+            }
+
+            // Modify packet (if needed)
+            if (ntohs(packet->opcode) == CQL_OPCODE_STARTUP) { // Handle STARTUP packet here, since we may need to set variables for the connection regarding compression
+                cql_string_map_t *sm = ReadStringMap((void *)packet + header_len);
+                cql_string_map_t *head = sm;
+
+                while (sm != NULL) {
+                    if (strcmp(sm->key, "COMPRESSION") == 0) {
+                        if (strcmp(sm->value, "lz4") == 0) {
+                            compression_type = CQL_COMPRESSION_LZ4;
+                        }
+                        else if (strcmp(sm->value, "snappy") == 0) {
+                            compression_type = CQL_COMPRESSION_SNAPPY;
+                        }
+                        else {
+                            // This is an error
+                        }
+
+                        // Strip compression from the STARTUP message before passing to Cassandra
+                        cql_string_map_t *next = sm->next;
+                        free(sm->key);
+                        free(sm->value);
+                        free(sm);
+                        sm = next;
+                    }
+                }
+
+                uint32_t new_len = WriteStringMap(head, (void *)packet + header_len);
+                packet->length = htonl(new_len);
+
+                free(head);
+            }
+            else { // All other packets get processed elsewhere
+                // TODO
+            }
+
+            // Send packet to Cassandra (body length may have changed, so re-get value from header)
+            if (send(cassandrafd, packet, header_len + ntohl(packet->length), 0) < 0) { // Packet total size is header + body => 8 + packet->length
                 fprintf(stderr, "%lu: Error sending packet to Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
@@ -218,8 +292,8 @@ void* HandleConn(void* thread_data) {
         }
 
         // Test to see if any bytes have arrived from Cassandra
-        ioctl(cassandrafd, FIONREAD, &bytesAvail);
-        if (bytesAvail > 0) {
+        ioctl(cassandrafd, FIONREAD, &bytes_avail);
+        if (bytes_avail > 0) {
 
             #if DEBUG
             printf("%lu: Processing packet from Cassandra.\n", (unsigned long)tid);
@@ -227,7 +301,7 @@ void* HandleConn(void* thread_data) {
 
             // Get packet back from Cassandra. We assume Cassandra will always give us properly formed packets.
             packet = (cql_packet_t *)malloc(header_len);
-            if (recv(cassandrafd, packet, header_len, 0) < 0) { //The CQL header is 8 bytes
+            if (recv(cassandrafd, packet, header_len, 0) < 0) { // The CQL header is 8 bytes
                 fprintf(stderr, "%lu: Error reading packet header from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
@@ -236,7 +310,7 @@ void* HandleConn(void* thread_data) {
             // Allocate more memory for rest of packet
             cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
             if (newpacket == NULL) {
-                fprintf(stderr, "%lu: Filed to realloc memory for packet body!\n", (unsigned long)tid);
+                fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
                 exit(1);
             }
             else {
@@ -245,15 +319,28 @@ void* HandleConn(void* thread_data) {
             }
 
             // Read in body of packet
-            if (recv(cassandrafd, packet + header_len, body_len, 0) < 0) { //Get the rest of the body
+            if (recv(cassandrafd, packet + header_len, body_len, 0) < 0) { // Get the rest of the body
                 fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
             // Modify packet (if needed)
+            // TODO call function to process packet
 
-            // Send packet to client
-            if (send(connfd, packet, header_len + body_len, 0) < 0) { //Packet total size is header + body => 8 + packet->length
+            // If compression was negotiated with the client, compress the body before sending it back
+            if (compression_type != CQL_COMPRESSION_NONE) {
+                if (compression_type == CQL_COMPRESSION_LZ4) {
+                    // TODO
+                }
+                else if (compression_type == CQL_COMPRESSION_SNAPPY) {
+                    // TODO
+                }
+
+                packet->flags = htons(ntohs(packet->flags) | CQL_FLAG_COMPRESSION);
+            }
+
+            // Send packet to client (body length may have changed, so re-get value from header)
+            if (send(connfd, packet, header_len + ntohl(packet->length), 0) < 0) { // Packet total size is header + body => 8 + packet->length
                 fprintf(stderr, "%lu: Error sending packet to client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
