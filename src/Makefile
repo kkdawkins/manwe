@@ -1,7 +1,7 @@
 CC = g++
 VALGRIND = valgrind
 
-CFLAGS = -Wall -Wextra -Werror -O3 -lpthread -lpcre
+CFLAGS = -Wall -Wextra -Werror -O3 -lpthread -lpcre -lboost_regex
 DEBUG_FLAGS = -g -O0 -DDEBUG #Define the DEBUG flag at compile time
 
 all:	gateway
