@@ -20,7 +20,6 @@ extern "C" {
 }
 #include "gateway.hpp"
 #include "helpers.hpp"
-
 // #include "cassandra.hpp"
 /*
  * Main processing loop of gateway. Spawns individual threads to handle each incoming TCP connection from a client.
@@ -361,19 +360,19 @@ void* HandleConn(void* thread_data) {
 
 char* prefix_cmd(char *cql_cmd, char *prefix){
 	pcre *reCompiled;
-        pcre_extra *pcreExtra;
-        const char *pcreErrorStr;
-        int pcreErrorOffset;
-        int subStrVec[30];
-        const char *psubStrMatchStr;
+	pcre_extra *pcreExtra;
+	const char *pcreErrorStr;
+	int pcreErrorOffset;
+	int subStrVec[30];
+	const char *psubStrMatchStr;
 	char *p_string = (char *)malloc(100);
-        int i;
-        int pcreExecRet;
-        const char *aStrRegex;
+	int i = 0, j = 0;
+	int length;
+	int pcreExecRet;
+	const char *aStrRegex;
 
 	//chomp newline character and replace whenever found
-	int length = strlen(cql_cmd);
-	int j = 0;
+	length = strlen(cql_cmd);
 	while(j < length){
 		if(cql_cmd[j] == '\n'){
 			cql_cmd[j] = ' ';
@@ -381,95 +380,106 @@ char* prefix_cmd(char *cql_cmd, char *prefix){
 		j++;
 	}
 
-        //Regex to match
+	//Regex to match
 	aStrRegex = "USE[ ]+(.*);";
-        printf("Regex to use: %s, %s\n", aStrRegex, prefix);
+	printf("Regex to use: %s, %s\n", aStrRegex, prefix);
 
 	reCompiled = pcre_compile(aStrRegex, 0, &pcreErrorStr,
-                                 &pcreErrorOffset, NULL );
+			&pcreErrorOffset, NULL );
 
-        if(reCompiled == NULL){
-                printf("ERROR: Compilation failed: '%s'", pcreErrorStr);
-                exit(1);
-        }
+	if(reCompiled == NULL){
+		printf("ERROR: Compilation failed: '%s'", pcreErrorStr);
+		exit(1);
+	}
 
-        // Regex optimization
-        pcreExtra = pcre_study(reCompiled, 0, &pcreErrorStr);
-        if(pcreErrorStr != NULL) {
-                printf("ERROR: Something went wrong in optimization attempt:'%s'\n", pcreErrorStr);
-                exit(1);
-        }
+	// Regex optimization
+	pcreExtra = pcre_study(reCompiled, 0, &pcreErrorStr);
+	if(pcreErrorStr != NULL) {
+		printf("ERROR: Something went wrong in optimization attempt:'%s'\n", pcreErrorStr);
+		exit(1);
+	}
 
 	pcreExecRet = pcre_exec(reCompiled,
-                                        pcreExtra,
-                                        cql_cmd,
-                                        strlen(cql_cmd),
-                                        0,
-                                        0,
-                                        subStrVec,
-                                        30);
+			pcreExtra,
+			cql_cmd,
+			strlen(cql_cmd),
+			0,
+			0,
+			subStrVec,
+			30);
 	if(pcreExecRet < 0) {
-                switch(pcreExecRet){
-                case PCRE_ERROR_NOMATCH     :printf("String did not match\n");
-                                             break;
-                case PCRE_ERROR_NULL        :printf("Encountered null\n");
-                                             break;
-                case PCRE_ERROR_BADOPTION   :printf("A bad option was passed\n");
-                                             break;
-                case PCRE_ERROR_BADMAGIC    :printf("Magic number bad\n");
-                                             break;
-                case PCRE_ERROR_UNKNOWN_NODE:printf("Something bad in recompiled regex\n");
-                                             break;
-                case PCRE_ERROR_NOMEMORY    :printf("Ran out of memory\n");
-                                             break;
-                default                     :printf("Unknown error\n");
-                                             break;
-         }
-        }
+		switch(pcreExecRet){
+			case PCRE_ERROR_NOMATCH     :printf("String did not match\n");
+						     break;
+			case PCRE_ERROR_NULL        :printf("Encountered null\n");
+						     break;
+			case PCRE_ERROR_BADOPTION   :printf("A bad option was passed\n");
+						     break;
+			case PCRE_ERROR_BADMAGIC    :printf("Magic number bad\n");
+						     break;
+			case PCRE_ERROR_UNKNOWN_NODE:printf("Something bad in recompiled regex\n");
+						     break;
+			case PCRE_ERROR_NOMEMORY    :printf("Ran out of memory\n");
+						     break;
+			default                     :printf("Unknown error\n");
+						     break;
+		}
+	}
 	else{
-         printf("######A match was found#######\n");
+		printf("######A match was found#######\n");
 
-         if(pcreExecRet == 0){
-           printf("Too many substrings for substring vector\n");
-           pcreExecRet = 10;
-                }
+		if(pcreExecRet == 0){
+			printf("Too many substrings for substring vector\n");
+			pcreExecRet = 10;
+		}
 
-        for(i=0;i<pcreExecRet;i++){
-          pcre_get_substring(cql_cmd, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
-          printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
-	  if(i){
-                strcpy(p_string, psubStrMatchStr);
-                prepend(p_string, "USE 123abc");
-                printf("Result of processing: %s\n", p_string);
-          }
+		for(i=0;i<pcreExecRet;i++){
+			pcre_get_substring(cql_cmd, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
+			printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
+			if(i){
+				strcpy(p_string, psubStrMatchStr);
+				prepend(p_string, "USE 123abc");
+				printf("Result of processing: %s\n", p_string);
+			}
 
-        }
-        pcre_free_substring(psubStrMatchStr);
-        }
-	 pcre_free(reCompiled);
+		}
+		pcre_free_substring(psubStrMatchStr);
+	}
+	pcre_free(reCompiled);
 
-        if(pcreExtra != NULL){
-                pcre_free(pcreExtra);
-        }
+	if(pcreExtra != NULL){
+		pcre_free(pcreExtra);
+	}
 
 	return p_string;
 }
 
 void prepend(char* s, const char* t)
 {
-    size_t len = strlen(t);
-    size_t i;
+	size_t len = strlen(t);
+	size_t i;
 
-    memmove(s + len, s, len + 1);
+	memmove(s + len, s, len + 1);
 
-    for (i = 0; i < len; ++i)
-    {
-        s[i] = t[i];
-    }
+	for (i = 0; i < len; ++i)
+	{
+		s[i] = t[i];
+	}
 }
 
+const char* process_cql_command(char *cql_cmd, char *prefix){
+	std::string cmd = cql_cmd;	
+	std::string pfix = prefix;
+	//std::string use_regex = "USE[ ]+(.*);";
+	boost::regex expression("USE[ ]+(.*);");
+	//check if CQL command matches regex
+	if(boost::regex_match(cmd, expression)){		
+		cmd.replace(4, 0, pfix); 
+	}
 
+	return cmd.c_str();
 
+}
 
 
 

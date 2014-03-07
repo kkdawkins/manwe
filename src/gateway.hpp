@@ -4,6 +4,10 @@
 //
 // SYSTEM DEFINE SECTION
 //
+
+#include <boost/regex.hpp>
+#include <string>
+
 extern "C" {
 #include <stdint.h>
 
@@ -85,6 +89,7 @@ typedef struct {
 
 void* HandleConn(void* thread_data);
 char* prefix_cmd(char *cql_cmd, char *prefix);
+const char* process_cql_command(char *cql_cmd, char *prefix);
 void prepend(char* s, const char* t);
 
 #endif
