@@ -3,6 +3,7 @@
  * CSC 652 - 2014
  */
 
+#include "cassandra.hpp"
 
 // This function is called asynchronously every time an event is logged
 void
@@ -22,8 +23,10 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
     
     // Init CQL
     cql_initialize();
-    cql_thread_infrastructure_t cql_ti;
+    //cql_thread_infrastructure_t cql_ti;
     
+    
+    (void)internalToken; // Ugh ... c++ does not like "set but not used"
     
     try{
     
@@ -64,7 +67,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 new cql::cql_query_t("SELECT internalToken FROM tokentable WHERE usertoken=?;", cql::CQL_CONSISTENCY_ONE));
                 
              // compile the parametrized query on the server
-            future = session->prepare(unbound_select);
+            future = session->prepare(select_internal);
             future.wait();
             
             if(future.get().error.is_err()){
@@ -96,7 +99,10 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             }
             
             if (future.get().result) {
-                
+                cql::cql_byte_t* data = NULL;
+                cql::cql_int_t size = 0;
+                (*future.get().result).get_data(0 /* Index */, &data, size);
+                internalToken = reinterpret_cast<char*>(data);
             }else{
                 // There was no user token found. Normal fail case.
                 internalToken = NULL;
@@ -106,10 +112,12 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             session->close();
         }
 		cluster->shutdown();
+		return true;
     }
     catch (std::exception& e)
     {
         std::cout << "Exception: " << e.what() << std::endl;
+        return false;
     }
 }
 
