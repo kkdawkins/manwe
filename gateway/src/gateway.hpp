@@ -23,7 +23,8 @@ extern "C" {
 //We need to know if we're on a little-endian machine, since that will require us to call the appropriate hton/ntoh functions. Note this only works with gcc.
 #define IS_LITTLE_ENDIAN (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 
-#define CASSANDRA_PORT 9160
+// We are using the CQL port, not the Thrift one (that's 9160)
+#define CASSANDRA_PORT 9042
 
 //
 // Documentation for the CQL binary protocol is avaiable at <https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol_v2.spec;hb=29670eb6692f239a3e9b0db05f2d5a1b5d4eb8b0>
