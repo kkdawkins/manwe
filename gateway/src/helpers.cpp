@@ -23,18 +23,21 @@ void SendCQLError(int sock, uint32_t tid, uint32_t err, char* msg) {
     cql_packet_t *p = (cql_packet_t *)malloc(p_len);
     memset(p, 0, p_len);
 
-    p->version = htons(CQL_V2_RESPONSE);
-    p->opcode = htons(CQL_OPCODE_ERROR);
+    p->version = CQL_V2_RESPONSE;
+    p->opcode = CQL_OPCODE_ERROR;
     p->length = htonl(6 + strlen(msg));
-    memset(p + sizeof(cql_packet_t), htonl(err), 1);
+    err = htonl(err);
+    memcpy((char *)p + sizeof(cql_packet_t), &err, 1);
     uint16_t str_len = htons(strlen(msg));
-    memcpy(p + sizeof(cql_packet_t) + 4, &str_len, 1);
-    memcpy(p + sizeof(cql_packet_t) + 6, msg, strlen(msg));
+    memcpy((char *)p + sizeof(cql_packet_t) + 4, &str_len, 1);
+    memcpy((char *)p + sizeof(cql_packet_t) + 6, msg, strlen(msg));
 
     if (send(sock, p, p_len, 0) < 0) { // Send the packet
         fprintf(stderr, "%u: Error sending error packet to client: %s\n", tid, strerror(errno));
         exit(1);
     }
+
+    free(p);
 }
 
 /*
@@ -80,6 +83,9 @@ cql_string_map_t * ReadStringMap(char *buf) {
             sm->next = (cql_string_map_t *)malloc(sizeof(cql_string_map_t));
             sm = sm->next;
         }
+        else {
+            sm->next = NULL;
+        }
     }
 
     return head;
@@ -88,10 +94,10 @@ cql_string_map_t * ReadStringMap(char *buf) {
 /*
  * Coverts a linked list of key/value strings into the CQL string map format. Returns size of new buffer.
  */
-uint32_t WriteStringMap(cql_string_map_t *sm, char *buf) {
+char* WriteStringMap(cql_string_map_t *sm, uint32_t *new_len) {
     if (sm == NULL) {
-        buf = NULL;
-        return 0;
+        *new_len = 0;
+        return NULL;
     }
 
     cql_string_map_t *head = sm;
@@ -107,7 +113,7 @@ uint32_t WriteStringMap(cql_string_map_t *sm, char *buf) {
         sm = sm->next;
     }
 
-    buf = (char *)malloc(buf_size);
+    char *buf = (char *)malloc(buf_size);
     num_pairs = htons(num_pairs);
     memcpy(buf, &num_pairs, 2);
 
@@ -120,7 +126,6 @@ uint32_t WriteStringMap(cql_string_map_t *sm, char *buf) {
         offset += 2;
         memcpy(buf + offset, sm->key, strlen(sm->key));
         offset += strlen(sm->key);
-        free(sm->key);
 
         // Value
         str_len = strlen(sm->value);
@@ -129,12 +134,20 @@ uint32_t WriteStringMap(cql_string_map_t *sm, char *buf) {
         offset += 2;
         memcpy(buf + offset, sm->value, strlen(sm->value));
         offset += strlen(sm->value);
-        free(sm->value);
 
+        sm = sm->next;
+    }
+
+    *new_len = buf_size;
+    return buf;
+}
+
+void FreeStringMap(cql_string_map_t *sm) {
+    while (sm != NULL) {
         cql_string_map_t *next = sm->next;
+        free(sm->key);
+        free(sm->value);
         free(sm);
         sm = next;
     }
-
-    return buf_size;
 }

@@ -191,7 +191,7 @@ void* HandleConn(void* thread_data) {
                 fprintf(stderr, "%u: Error reading first byte from client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
-            if (ntohs(packet->version) != CQL_V2_REQUEST) { // Verify version
+            if (packet->version != CQL_V2_REQUEST) { // Verify version
                 #if DEBUG
                 printf("%u: First byte from client is not CQL_V2_REQUEST, closing connections and killing thread.\n", (uint32_t)tid);
                 #endif
@@ -206,7 +206,8 @@ void* HandleConn(void* thread_data) {
                 fprintf(stderr, "%u: Error reading remainder of header from client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
-            if (ntohs(packet->stream) <= 0) { // Client request stream ids must be postitive
+            if (packet->stream < 0) { // Client request stream ids must be postitive
+                                      // FIXME the python client library seems to start stream ids with "0", which isn't positive or negative
                 char msg[] = "Invalid stream id";
                 SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
 
@@ -214,6 +215,10 @@ void* HandleConn(void* thread_data) {
                 close(connfd);
                 break;
             }
+
+            #if DEBUG
+            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %d; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, packet->opcode, ntohl(packet->length));
+            #endif
 
             body_len = ntohl(packet->length);
 
@@ -224,35 +229,73 @@ void* HandleConn(void* thread_data) {
                 exit(1);
             }
             else {
-                free(packet);
                 packet = newpacket;
             }
 
             // Read in body of packet
-            if (recv(connfd, packet + header_len, body_len, 0) < 0) { // Get the rest of the body
+            if (recv(connfd, (char *)packet + header_len, body_len, 0) < 0) { // Get the rest of the body
                 fprintf(stderr, "%lu: Error reading packet body from client: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
 
+            #if DEBUG
+            printf("%u: Full packet received, beginning processing.\n", (uint32_t)tid);
+            #endif
+
             // If the packet is compressed, decompress the body. Note that we always send uncompressed packets to Cassandra itself, since
             // we're communicating directly on the same host.
-            if (ntohs(packet->flags) & CQL_FLAG_COMPRESSION) {
+            if (packet->flags & CQL_FLAG_COMPRESSION) {
+                #if DEBUG
+                printf("%u: Packet body is compressed, decompressing.\n", (uint32_t)tid);
+                #endif
+
                 if (compression_type == CQL_COMPRESSION_LZ4) {
+                    #if DEBUG
+                    printf("%u: It's lz4 compression!\n", (uint32_t)tid);
+                    #endif
+
                     // TODO
                 }
                 else if (compression_type == CQL_COMPRESSION_SNAPPY) {
+                    #if DEBUG
+                    printf("%u: It's snappy compression!\n", (uint32_t)tid);
+                    #endif
+
                     // TODO
                 }
+                else {
+                    // Either the client is trying to use an unsupported compression algorithm, or compression wasn't properly configured when the STARTUP command was sent. Error in either case.
 
-                packet->flags = htons(ntohs(packet->flags) & ~CQL_FLAG_COMPRESSION);
+                    #if DEBUG
+                    printf("%u: Error - Unknown compression method / compression not negotiated.\n", (uint32_t)tid);
+                    #endif
+
+                    char msg[] = "Unknown compression method / compression not negotiated";
+                    SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
+
+                    free(packet);
+                    close(connfd);
+                    break;
+                }
+
+                packet->flags &= ~CQL_FLAG_COMPRESSION;
             }
 
             // Modify packet (if needed)
-            if (ntohs(packet->opcode) == CQL_OPCODE_STARTUP) { // Handle STARTUP packet here, since we may need to set variables for the connection regarding compression
+            if (packet->opcode == CQL_OPCODE_STARTUP) { // Handle STARTUP packet here, since we may need to set variables for the connection regarding compression
+
+                #if DEBUG
+                printf("%u: Handling STARTUP packet to detect whether to enable compression support.\n", (uint32_t)tid);
+                #endif
+
                 cql_string_map_t *sm = ReadStringMap((char *)packet + header_len);
                 cql_string_map_t *head = sm;
 
                 while (sm != NULL) {
+                    #if DEBUG
+                    printf("%u:   %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
+                    #endif
+
                     if (strcmp(sm->key, "COMPRESSION") == 0) {
                         if (strcmp(sm->value, "lz4") == 0) {
                             compression_type = CQL_COMPRESSION_LZ4;
@@ -261,7 +304,18 @@ void* HandleConn(void* thread_data) {
                             compression_type = CQL_COMPRESSION_SNAPPY;
                         }
                         else {
-                            // This is an error
+                            #if DEBUG
+                            printf("%u: Error - Unknown compression method '%s'.\n", (uint32_t)tid, sm->value);
+                            #endif
+
+                            char msg[] = "Unknown compression method";
+                            SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
+
+                            free(head);
+                            head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
+                            free(packet);
+                            close(connfd);
+                            break;
                         }
 
                         // Strip compression from the STARTUP message before passing to Cassandra
@@ -271,12 +325,26 @@ void* HandleConn(void* thread_data) {
                         free(sm);
                         sm = next;
                     }
+                    else {
+                        sm = sm->next;
+                    }
                 }
 
-                uint32_t new_len = WriteStringMap(head, (char *)packet + header_len);
+                if (head == NULL) { // Previously seen error in getting compression method
+                    break;
+                }
+
+                uint32_t new_len = 0;
+                char *new_body = WriteStringMap(head, &new_len);
+                memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length can only ever remain the same or decrease if the compression option was removed, so no chance of writing past the end of allocated memory.
+                free(new_body);
                 packet->length = htonl(new_len);
 
-                free(head);
+                FreeStringMap(head);
+
+                #if DEBUG
+                printf("%u: Finished with STARTUP, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
             }
             else { // All other packets get processed elsewhere
                 // TODO
@@ -289,6 +357,10 @@ void* HandleConn(void* thread_data) {
             }
 
             free(packet);
+
+            #if DEBUG
+            printf("%u: Packet successfully sent to Cassandra.\n", (uint32_t)tid);
+            #endif
         }
 
         // Test to see if any bytes have arrived from Cassandra
@@ -305,6 +377,11 @@ void* HandleConn(void* thread_data) {
                 fprintf(stderr, "%lu: Error reading packet header from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
+
+            #if DEBUG
+            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %d; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, packet->opcode, ntohl(packet->length));
+            #endif
+
             body_len = ntohl(packet->length);
 
             // Allocate more memory for rest of packet
@@ -314,29 +391,44 @@ void* HandleConn(void* thread_data) {
                 exit(1);
             }
             else {
-                free(packet);
                 packet = newpacket;
             }
 
             // Read in body of packet
-            if (recv(cassandrafd, packet + header_len, body_len, 0) < 0) { // Get the rest of the body
+            if (recv(cassandrafd, (char *)packet + header_len, body_len, 0) < 0) { // Get the rest of the body
                 fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
                 exit(1);
             }
+
+            #if DEBUG
+            printf("%u: Full packet received, beginning processing.\n", (uint32_t)tid);
+            #endif
 
             // Modify packet (if needed)
             // TODO call function to process packet
 
             // If compression was negotiated with the client, compress the body before sending it back
             if (compression_type != CQL_COMPRESSION_NONE) {
+                #if DEBUG
+                printf("%u: Need to compress packet before sending back to client.\n", (uint32_t)tid);
+                #endif
+
                 if (compression_type == CQL_COMPRESSION_LZ4) {
+                    #if DEBUG
+                    printf("%u: Using lz4 compression!\n", (uint32_t)tid);
+                    #endif
+
                     // TODO
                 }
                 else if (compression_type == CQL_COMPRESSION_SNAPPY) {
+                    #if DEBUG
+                    printf("%u: Using snappy compression!\n", (uint32_t)tid);
+                    #endif
+
                     // TODO
                 }
 
-                packet->flags = htons(ntohs(packet->flags) | CQL_FLAG_COMPRESSION);
+                packet->flags |= CQL_FLAG_COMPRESSION;
             }
 
             // Send packet to client (body length may have changed, so re-get value from header)
@@ -346,6 +438,10 @@ void* HandleConn(void* thread_data) {
             }
 
             free(packet);
+
+            #if DEBUG
+            printf("%u: Packet successfully sent to client.\n", (uint32_t)tid);
+            #endif
         }
     }
 
