@@ -151,3 +151,9 @@ void FreeStringMap(cql_string_map_t *sm) {
         sm = next;
     }
 }
+
+void gracefulExit(int sig) {
+    fprintf(stderr, "\nCaught sig %d -- exiting.\n", sig);
+
+    exit(0);
+}
