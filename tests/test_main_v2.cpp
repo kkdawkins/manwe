@@ -27,7 +27,7 @@ main(int argc, char**)
     // Suppose you have the Cassandra cluster at 127.0.0.1,
     // listening at default port (9042).
     shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
-    builder->add_contact_point(boost::asio::ip::address::from_string("127.0.0.1"));
+    builder->add_contact_point(boost::asio::ip::address::from_string("138.91.91.208"));
     builder->with_log_callback(&log_callback); //for logging of activities 
 
     // Now build a model of cluster and connect it to DB.
