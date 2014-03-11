@@ -9,6 +9,7 @@ extern "C" {
 #include <string.h>
 #include <pcre.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -26,6 +27,8 @@ extern "C" {
  * Return 0 on success (never reached, since it will listen for connections until killed), 1 on error.
 */
 int main(int argc, char *argv[]) {
+    signal(SIGINT, gracefulExit); // Catch CTRL+C and exit cleanly to properly cleanup memory usage
+
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <IP addr to listen on>\n", argv[0]);
         exit(1);

@@ -16,4 +16,6 @@ cql_string_map_t* ReadStringMap(char *buf);
 char* WriteStringMap(cql_string_map_t *sm, uint32_t *new_len);
 void FreeStringMap(cql_string_map_t *sm);
 
+void gracefulExit(int sig);
+
 #endif
