@@ -222,20 +222,29 @@ void* HandleConn(void* thread_data) {
 
             body_len = ntohl(packet->length);
 
-            // Allocate more memory for rest of packet
-            cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
-            if (newpacket == NULL) {
-                fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
-                exit(1);
-            }
-            else {
-                packet = newpacket;
-            }
+            if (body_len > 0) {
+                // Allocate more memory for rest of packet
+                cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
+                if (newpacket == NULL) {
+                    fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
+                    exit(1);
+                }
+                else {
+                    packet = newpacket;
+                }
 
-            // Read in body of packet
-            if (recv(connfd, (char *)packet + header_len, body_len, 0) < 0) { // Get the rest of the body
-                fprintf(stderr, "%lu: Error reading packet body from client: %s\n", (unsigned long)tid, strerror(errno));
-                exit(1);
+                // Read in body of packet (possibly over more than one recv() call)
+                uint32_t body_bytes_read = 0;
+                while (body_bytes_read < body_len) { // Get the rest of the body
+                    int32_t bytes_in = recv(connfd, (char *)packet + header_len + body_bytes_read, body_len - body_bytes_read, 0);
+                    if (bytes_in < 0) {
+                        fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                        exit(1);
+                    }
+                    else {
+                        body_bytes_read += bytes_in;
+                    }
+                }
             }
 
             #if DEBUG
@@ -384,20 +393,29 @@ void* HandleConn(void* thread_data) {
 
             body_len = ntohl(packet->length);
 
-            // Allocate more memory for rest of packet
-            cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
-            if (newpacket == NULL) {
-                fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
-                exit(1);
-            }
-            else {
-                packet = newpacket;
-            }
+            if (body_len > 0) {
+                // Allocate more memory for rest of packet
+                cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
+                if (newpacket == NULL) {
+                    fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
+                    exit(1);
+                }
+                else {
+                    packet = newpacket;
+                }
 
-            // Read in body of packet
-            if (recv(cassandrafd, (char *)packet + header_len, body_len, 0) < 0) { // Get the rest of the body
-                fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
-                exit(1);
+                // Read in body of packet (possibly over more than one recv() call)
+                uint32_t body_bytes_read = 0;
+                while (body_bytes_read < body_len) { // Get the rest of the body
+                    int32_t bytes_in = recv(cassandrafd, (char *)packet + header_len + body_bytes_read, body_len - body_bytes_read, 0);
+                    if (bytes_in < 0) {
+                        fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                        exit(1);
+                    }
+                    else {
+                        body_bytes_read += bytes_in;
+                    }
+                }
             }
 
             #if DEBUG
