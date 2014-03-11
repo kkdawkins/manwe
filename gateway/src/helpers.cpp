@@ -23,7 +23,7 @@ void SendCQLError(int sock, uint32_t tid, uint32_t err, char* msg) {
     cql_packet_t *p = (cql_packet_t *)malloc(p_len);
     memset(p, 0, p_len);
 
-    p->version = CQL_V2_RESPONSE;
+    p->version = CQL_V1_RESPONSE;
     p->opcode = CQL_OPCODE_ERROR;
     p->length = htonl(6 + strlen(msg));
     err = htonl(err);
@@ -31,6 +31,10 @@ void SendCQLError(int sock, uint32_t tid, uint32_t err, char* msg) {
     uint16_t str_len = htons(strlen(msg));
     memcpy((char *)p + sizeof(cql_packet_t) + 4, &str_len, 1);
     memcpy((char *)p + sizeof(cql_packet_t) + 6, msg, strlen(msg));
+
+    #if DEBUG
+    printf("%u: Sending error to client: '%s'.\n", (uint32_t)tid, msg);
+    #endif
 
     if (send(sock, p, p_len, 0) < 0) { // Send the packet
         fprintf(stderr, "%u: Error sending error packet to client: %s\n", tid, strerror(errno));
@@ -51,6 +55,10 @@ cql_string_map_t * ReadStringMap(char *buf) {
     uint16_t num_pairs;
     memcpy(&num_pairs, buf, 2);
     num_pairs = ntohs(num_pairs);
+
+    if (num_pairs == 0) {
+        return NULL; // An empty string map can sometimes be sent, like in the cpp driver when sending no auth data
+    }
 
     int offset = 2; // Keep track as we move through the buffer
     uint16_t str_len = 0; // Length of each string we process
