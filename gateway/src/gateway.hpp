@@ -16,6 +16,7 @@ extern "C" {
 #include <assert.h>
 #endif
 }
+
 //
 // CONSTANT DEFINE SECTION
 //
@@ -23,8 +24,12 @@ extern "C" {
 //We need to know if we're on a little-endian machine, since that will require us to call the appropriate hton/ntoh functions. Note this only works with gcc.
 #define IS_LITTLE_ENDIAN (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
 
+#define CASSANDRA_IP "127.0.0.1"
 // We are using the CQL port, not the Thrift one (that's 9160)
 #define CASSANDRA_PORT 9042
+
+//40 byte tokens will be used
+#define TOKEN_LENGTH 40
 
 //
 // Documentation for the CQL binary protocol is avaiable at <https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol_v2.spec;hb=29670eb6692f239a3e9b0db05f2d5a1b5d4eb8b0>
@@ -58,7 +63,7 @@ typedef struct {
 #define CQL_OPCODE_STARTUP        0x01
 #define CQL_OPCODE_READY          0x02
 #define CQL_OPCODE_AUTHENTICATE   0x03
-//No 0x04 opcode
+#define CQL_OPCODE_CREDENTIALS    0x04 //No 0x04 opcode in v2
 #define CQL_OPCODE_OPTIONS        0x05
 #define CQL_OPCODE_SUPPORTED      0x06
 #define CQL_OPCODE_QUERY          0x07
@@ -67,6 +72,7 @@ typedef struct {
 #define CQL_OPCODE_EXECUTE        0x0A
 #define CQL_OPCODE_REGISTER       0x0B
 #define CQL_OPCODE_EVENT          0x0C
+// New v2 opcodes
 #define CQL_OPCODE_BATCH          0x0D
 #define CQL_OPCODE_AUTH_CHALLENGE 0x0E
 #define CQL_OPCODE_AUTH_RESPONSE  0x0F

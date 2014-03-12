@@ -21,7 +21,10 @@ extern "C" {
 }
 #include "gateway.hpp"
 #include "helpers.hpp"
-// #include "cassandra.hpp"
+//#include "cassandra.hpp"
+
+const char *printable_opcodes[17] = {"ERROR", "STARTUP", "READY", "AUTHENTICATE", "CREDENTIALS", "OPTIONS", "SUPPORTED", "QUERY", "RESULT", "PREPARE", "EXECUTE", "REGISTER", "EVENT", "BATCH", "AUTH_CHALLENGE", "AUTH_RESPONSE", "AUTH_SUCCESS"};
+
 /*
  * Main processing loop of gateway. Spawns individual threads to handle each incoming TCP connection from a client.
  * Return 0 on success (never reached, since it will listen for connections until killed), 1 on error.
@@ -115,7 +118,7 @@ int main(int argc, char *argv[]) {
 
 /*
  * This method handles each client connection, processes packets, rewrites queries as needed, and then forwards new packets onto the actaul Cassandra instance.
- * Assumes the real Cassandra instance is listening on 127.0.0.1:(CASSANDRA_PORT + 1).
+ * Assumes the real Cassandra instance is listening on CASSANDRA_IP:(CASSANDRA_PORT + 1).
  */
 void* HandleConn(void* thread_data) {
     int connfd = *(int *)thread_data;
@@ -127,44 +130,47 @@ void* HandleConn(void* thread_data) {
     pthread_t tid = pthread_self();
 
     #if DEBUG
-    printf("%lu: Thread spawned.\n", (unsigned long)tid);
+    printf("%u: Thread spawned.\n", (uint32_t)tid);
     #endif
 
     // Before entering the processing loop, we need to establish a connection to the real Cassandra
 
     #if DEBUG
-    printf("%lu: Establishing connection to Cassandra listening on 127.0.0.1:%d.\n", (unsigned long)tid, CASSANDRA_PORT + 1);
+    printf("%u: Establishing connection to Cassandra listening on %s:%d.\n", (uint32_t)tid, CASSANDRA_IP, CASSANDRA_PORT + 1);
     #endif
 
     struct sockaddr_in cassandra_addr;
     int cassandrafd = socket(AF_INET, SOCK_STREAM, 0);
     if (cassandrafd < 0) {
-        fprintf(stderr, "%lu: Socket creation error: %s\n", (unsigned long)tid, strerror(errno));
+        fprintf(stderr, "%u: Socket creation error: %s\n", (uint32_t)tid, strerror(errno));
         exit(1);
     }
 
     // Setup sockaddr struct
     memset(&cassandra_addr, 0, sizeof(cassandra_addr));
     cassandra_addr.sin_family = AF_INET;
-    cassandra_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    cassandra_addr.sin_addr.s_addr = inet_addr(CASSANDRA_IP);
     cassandra_addr.sin_port = htons(CASSANDRA_PORT + 1);
 
     // Bind the socket and port to the name
     if (connect(cassandrafd, (struct sockaddr*)&cassandra_addr, sizeof(cassandra_addr)) < 0) {
-        fprintf(stderr, "%lu: Socket bind error: %s\n", (unsigned long)tid, strerror(errno));
+        fprintf(stderr, "%u: Socket bind error: %s\n", (uint32_t)tid, strerror(errno));
         exit(1);
     }
 
     // Now, enter the packet processing loop
 
     #if DEBUG
-    printf("%lu: Entering the packet processing loop.\n", (unsigned long)tid);
+    printf("%u: Entering the packet processing loop.\n\n", (uint32_t)tid);
     #endif
 
     cql_packet_t *packet = NULL;
     uint8_t header_len = sizeof(cql_packet_t);
     uint32_t body_len = 0;
     int compression_type = CQL_COMPRESSION_NONE;
+    int protocol_version_in_use = 0;
+    char *token = (char *)malloc(TOKEN_LENGTH + 1);
+    memset(token, 0, TOKEN_LENGTH + 1);
     int bytes_avail = 0;
 
     while (1) {
@@ -181,7 +187,7 @@ void* HandleConn(void* thread_data) {
         if (bytes_avail > 0) {
 
             #if DEBUG
-            printf("%lu: Processing packet from client.\n", (unsigned long)tid);
+            printf("%u: Processing packet from client.\n", (uint32_t)tid);
             #endif
 
             // Get packet from client
@@ -189,20 +195,23 @@ void* HandleConn(void* thread_data) {
 
             // Perform some basic sanity checks to verify this looks like a CQL packet
 
-            // The first byte must be CQL_V2_REQUEST. Version 1 of the CQL protocol isn't supported by our gateway.
+            // The first byte must be CQL_V1_REQUEST. Version 2 of the CQL protocol isn't supported by our gateway.
             if (recv(connfd, packet, 1, 0) < 0) { //The first byte of the potential CQL header
                 fprintf(stderr, "%u: Error reading first byte from client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
-            if (packet->version != CQL_V2_REQUEST) { // Verify version
+            if (packet->version != CQL_V1_REQUEST) { // Verify version
                 #if DEBUG
-                printf("%u: First byte from client is not CQL_V2_REQUEST, closing connections and killing thread.\n", (uint32_t)tid);
+                printf("%u: First byte from client is not CQL_V1_REQUEST, closing connections and killing thread.\n", (uint32_t)tid);
                 #endif
 
                 free(packet);
                 close(connfd);
                 break;
             }
+
+            // Set the protocol version to v1
+            protocol_version_in_use = 1;
 
             // Now, read in the remaining 7 bytes of the header.
             if (recv(connfd, ((char *)packet) + 1, 7, 0) < 0) { //The remainder of the CQL header
@@ -220,7 +229,7 @@ void* HandleConn(void* thread_data) {
             }
 
             #if DEBUG
-            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %d; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, packet->opcode, ntohl(packet->length));
+            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %s; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, printable_opcodes[packet->opcode], ntohl(packet->length));
             #endif
 
             body_len = ntohl(packet->length);
@@ -229,7 +238,7 @@ void* HandleConn(void* thread_data) {
                 // Allocate more memory for rest of packet
                 cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
                 if (newpacket == NULL) {
-                    fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
+                    fprintf(stderr, "%u: Failed to realloc memory for packet body!\n", (uint32_t)tid);
                     exit(1);
                 }
                 else {
@@ -241,7 +250,7 @@ void* HandleConn(void* thread_data) {
                 while (body_bytes_read < body_len) { // Get the rest of the body
                     int32_t bytes_in = recv(connfd, (char *)packet + header_len + body_bytes_read, body_len - body_bytes_read, 0);
                     if (bytes_in < 0) {
-                        fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                        fprintf(stderr, "%u: Error reading packet body from client: %s\n", (uint32_t)tid, strerror(errno));
                         exit(1);
                     }
                     else {
@@ -258,19 +267,19 @@ void* HandleConn(void* thread_data) {
             // we're communicating directly on the same host.
             if (packet->flags & CQL_FLAG_COMPRESSION) {
                 #if DEBUG
-                printf("%u: Packet body is compressed, decompressing.\n", (uint32_t)tid);
+                printf("%u:   Packet body is compressed, decompressing.\n", (uint32_t)tid);
                 #endif
 
                 if (compression_type == CQL_COMPRESSION_LZ4) {
                     #if DEBUG
-                    printf("%u: It's lz4 compression!\n", (uint32_t)tid);
+                    printf("%u:   It's lz4 compression!\n", (uint32_t)tid);
                     #endif
 
                     // TODO
                 }
                 else if (compression_type == CQL_COMPRESSION_SNAPPY) {
                     #if DEBUG
-                    printf("%u: It's snappy compression!\n", (uint32_t)tid);
+                    printf("%u:   It's snappy compression!\n", (uint32_t)tid);
                     #endif
 
                     // TODO
@@ -279,7 +288,7 @@ void* HandleConn(void* thread_data) {
                     // Either the client is trying to use an unsupported compression algorithm, or compression wasn't properly configured when the STARTUP command was sent. Error in either case.
 
                     #if DEBUG
-                    printf("%u: Error - Unknown compression method / compression not negotiated.\n", (uint32_t)tid);
+                    printf("%u:   Error - Unknown compression method / compression not negotiated.\n", (uint32_t)tid);
                     #endif
 
                     char msg[] = "Unknown compression method / compression not negotiated";
@@ -297,15 +306,28 @@ void* HandleConn(void* thread_data) {
             if (packet->opcode == CQL_OPCODE_STARTUP) { // Handle STARTUP packet here, since we may need to set variables for the connection regarding compression
 
                 #if DEBUG
-                printf("%u: Handling STARTUP packet to detect whether to enable compression support.\n", (uint32_t)tid);
+                printf("%u:   Handling STARTUP packet to detect whether to enable compression support.\n", (uint32_t)tid);
                 #endif
 
                 cql_string_map_t *sm = ReadStringMap((char *)packet + header_len);
                 cql_string_map_t *head = sm;
 
+                if (sm == NULL) { // Malformed STARTUP, since there must always be a CQL_VERSION sent. Send back an error
+                    #if DEBUG
+                    printf("%u:     Error - Malformed STARTUP.\n", (uint32_t)tid);
+                    #endif
+
+                    char msg[] = "Malformed STARTUP";
+                    SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
+
+                    free(packet);
+                    close(connfd);
+                    break;
+                }
+
                 while (sm != NULL) {
                     #if DEBUG
-                    printf("%u:   %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
+                    printf("%u:     %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
                     #endif
 
                     if (strcmp(sm->key, "COMPRESSION") == 0) {
@@ -317,13 +339,13 @@ void* HandleConn(void* thread_data) {
                         }
                         else {
                             #if DEBUG
-                            printf("%u: Error - Unknown compression method '%s'.\n", (uint32_t)tid, sm->value);
+                            printf("%u:     Error - Unknown compression method '%s'.\n", (uint32_t)tid, sm->value);
                             #endif
 
                             char msg[] = "Unknown compression method";
                             SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
 
-                            free(head);
+                            FreeStringMap(head);
                             head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
                             free(packet);
                             close(connfd);
@@ -355,7 +377,92 @@ void* HandleConn(void* thread_data) {
                 FreeStringMap(head);
 
                 #if DEBUG
-                printf("%u: Finished with STARTUP, passing to Cassandra.\n", (uint32_t)tid);
+                printf("%u:   Finished with STARTUP, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
+            }
+            else if (packet->opcode == CQL_OPCODE_CREDENTIALS) { // Modify CREDENTIALS packet to get the instance prefix
+                if (protocol_version_in_use != 1) { // CREDENTIALS is only used in v1 of the CQL protocol
+                    char msg[] = "CREDENTIALS not supported in this version of CQL";
+                    SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
+
+                    free(packet);
+                    close(connfd);
+                    break;
+                }
+
+                #if DEBUG
+                printf("%u:   Handling CREDENTIALS packet to get tenant's token.\n", (uint32_t)tid);
+                #endif
+
+                cql_string_map_t *sm = ReadStringMap((char *)packet + header_len); // Get the username / password pair
+                cql_string_map_t *head = sm;
+
+                if (sm == NULL) { // No credentials were provided. Send back an error
+                    #if DEBUG
+                    printf("%u:     Error - No credentials supplied.\n", (uint32_t)tid);
+                    #endif
+
+                    char msg[] = "No credentials supplied";
+                    SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_BAD_CREDENTIALS, msg);
+
+                    free(packet);
+                    close(connfd);
+                    break;
+                }
+
+                while (sm != NULL) {
+                    printf("%u:     %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
+
+                    if (strcmp(sm->key, "username") == 0) {
+                        if (strlen(sm->value) <= TOKEN_LENGTH) { // The supplied username must be at least TOKEN_LENGTH + 1 characters long, so we can properly grab the token and still have at least one character remaining to pass on to Cassandra.
+                            #if DEBUG
+                            printf("%u:       Error - Invalid token + username supplied.\n", (uint32_t)tid);
+                            #endif
+
+                            char msg[] = "Token + username is too short";
+                            SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_BAD_CREDENTIALS, msg);
+
+                            FreeStringMap(head);
+                            head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
+                            free(packet);
+                            close(connfd);
+                            break;
+                        }
+                        else {
+                            strncpy(token, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
+                            char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
+                            memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
+                            strncpy(username, sm->value + TOKEN_LENGTH, strlen(sm->value) - TOKEN_LENGTH);
+                            strncpy(sm->value, username, strlen(username)); // Move the actual username to the front
+                            memset(sm->value + strlen(username), 0, 1); // NULL terminate the string
+                            free(username);
+
+                            #if DEBUG
+                            printf("%u:       Token: %s\n", (uint32_t)tid, token);
+                            printf("%u:       Username: %s\n", (uint32_t)tid, sm->value);
+                            #endif
+
+                            // FIXME need to validate supplied token here. If valid, continue, otherwise send back error to client
+                        }
+                    }
+
+                    sm = sm->next;
+                }
+
+                if (head == NULL) { // Previously seen error in getting compression method
+                    break;
+                }
+
+                uint32_t new_len = 0;
+                char *new_body = WriteStringMap(head, &new_len);
+                memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length will decrease by TOKEN_LENGTH bytes, so memory allocation will be fine.
+                free(new_body);
+                packet->length = htonl(new_len);
+
+                FreeStringMap(head);
+
+                #if DEBUG
+                printf("%u:   Finished with CREDENTIALS, passing to Cassandra.\n", (uint32_t)tid);
                 #endif
             }
             else { // All other packets get processed elsewhere
@@ -364,14 +471,14 @@ void* HandleConn(void* thread_data) {
 
             // Send packet to Cassandra (body length may have changed, so re-get value from header)
             if (send(cassandrafd, packet, header_len + ntohl(packet->length), 0) < 0) { // Packet total size is header + body => 8 + packet->length
-                fprintf(stderr, "%lu: Error sending packet to Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                fprintf(stderr, "%u: Error sending packet to Cassandra: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
 
             free(packet);
 
             #if DEBUG
-            printf("%u: Packet successfully sent to Cassandra.\n", (uint32_t)tid);
+            printf("%u: Packet successfully sent to Cassandra.\n\n", (uint32_t)tid);
             #endif
         }
 
@@ -380,18 +487,20 @@ void* HandleConn(void* thread_data) {
         if (bytes_avail > 0) {
 
             #if DEBUG
-            printf("%lu: Processing packet from Cassandra.\n", (unsigned long)tid);
+            printf("%u: Processing packet from Cassandra.\n", (uint32_t)tid);
             #endif
 
             // Get packet back from Cassandra. We assume Cassandra will always give us properly formed packets.
             packet = (cql_packet_t *)malloc(header_len);
             if (recv(cassandrafd, packet, header_len, 0) < 0) { // The CQL header is 8 bytes
-                fprintf(stderr, "%lu: Error reading packet header from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                fprintf(stderr, "%u: Error reading packet header from Cassandra: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
 
             #if DEBUG
-            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %d; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, packet->opcode, ntohl(packet->length));
+            assert(packet->version == CQL_V1_RESPONSE);
+
+            printf("%u: Header information -- version: %d; flags: %d; stream: %d; opcode: %s; length: %u\n", (uint32_t)tid, packet->version, packet->flags, packet->stream, printable_opcodes[packet->opcode], ntohl(packet->length));
             #endif
 
             body_len = ntohl(packet->length);
@@ -400,7 +509,7 @@ void* HandleConn(void* thread_data) {
                 // Allocate more memory for rest of packet
                 cql_packet_t *newpacket = (cql_packet_t *)realloc(packet, header_len + body_len);
                 if (newpacket == NULL) {
-                    fprintf(stderr, "%lu: Failed to realloc memory for packet body!\n", (unsigned long)tid);
+                    fprintf(stderr, "%u: Failed to realloc memory for packet body!\n", (uint32_t)tid);
                     exit(1);
                 }
                 else {
@@ -412,7 +521,7 @@ void* HandleConn(void* thread_data) {
                 while (body_bytes_read < body_len) { // Get the rest of the body
                     int32_t bytes_in = recv(cassandrafd, (char *)packet + header_len + body_bytes_read, body_len - body_bytes_read, 0);
                     if (bytes_in < 0) {
-                        fprintf(stderr, "%lu: Error reading packet body from Cassandra: %s\n", (unsigned long)tid, strerror(errno));
+                        fprintf(stderr, "%u: Error reading packet body from Cassandra: %s\n", (uint32_t)tid, strerror(errno));
                         exit(1);
                     }
                     else {
@@ -426,24 +535,43 @@ void* HandleConn(void* thread_data) {
             #endif
 
             // Modify packet (if needed)
-            // TODO call function to process packet
+            if (packet->opcode == CQL_OPCODE_AUTHENTICATE) { // Print body of AUTHENTICATE packet
+                #if DEBUG
+                printf("%u:   Handling AUTHENTICATE packet from Cassandra.\n", (uint32_t)tid);
+
+                uint16_t str_len = 0;
+                memcpy(&str_len, (char *)packet + header_len, 2);
+                str_len = ntohs(str_len);
+
+                char *body = (char *)malloc(str_len + 1);
+                memset(body, 0, str_len + 1);
+                strncpy(body, (char *)packet + header_len + 2, str_len);
+                printf("%u:     %s\n", (uint32_t)tid, body);
+                free(body);
+
+                printf("%u:   Finished with AUTHENTICATE, passing to client.\n", (uint32_t)tid);
+                #endif
+            }
+            else { // All other packets get processed elsewhere
+                // TODO
+            }
 
             // If compression was negotiated with the client, compress the body before sending it back
             if (compression_type != CQL_COMPRESSION_NONE) {
                 #if DEBUG
-                printf("%u: Need to compress packet before sending back to client.\n", (uint32_t)tid);
+                printf("%u:   Need to compress packet before sending back to client.\n", (uint32_t)tid);
                 #endif
 
                 if (compression_type == CQL_COMPRESSION_LZ4) {
                     #if DEBUG
-                    printf("%u: Using lz4 compression!\n", (uint32_t)tid);
+                    printf("%u:   Using lz4 compression!\n", (uint32_t)tid);
                     #endif
 
                     // TODO
                 }
                 else if (compression_type == CQL_COMPRESSION_SNAPPY) {
                     #if DEBUG
-                    printf("%u: Using snappy compression!\n", (uint32_t)tid);
+                    printf("%u:   Using snappy compression!\n", (uint32_t)tid);
                     #endif
 
                     // TODO
@@ -454,24 +582,26 @@ void* HandleConn(void* thread_data) {
 
             // Send packet to client (body length may have changed, so re-get value from header)
             if (send(connfd, packet, header_len + ntohl(packet->length), 0) < 0) { // Packet total size is header + body => 8 + packet->length
-                fprintf(stderr, "%lu: Error sending packet to client: %s\n", (unsigned long)tid, strerror(errno));
+                fprintf(stderr, "%u: Error sending packet to client: %s\n", (uint32_t)tid, strerror(errno));
                 exit(1);
             }
 
             free(packet);
 
             #if DEBUG
-            printf("%u: Packet successfully sent to client.\n", (uint32_t)tid);
+            printf("%u: Packet successfully sent to client.\n\n", (uint32_t)tid);
             #endif
         }
     }
 
     #if DEBUG
-    printf("%lu: Client connection terminated, thread dying.\n", (unsigned long)tid);
+    printf("%u: Client connection terminated, thread dying.\n", (uint32_t)tid);
     #endif
 
     // Properly close connection to Cassandra server
     close(cassandrafd);
+
+    free(token);
 
     return NULL;
 }

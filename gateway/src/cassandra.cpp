@@ -30,10 +30,10 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
     
     try{
     
-		// listening at default port (9042).
+		// listening at default port plus one (9042 + 1).
         shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
         builder->with_log_callback(&log_callback);
-        builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP));
+        builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP), CASSANDRA_PORT + 1);
 		
 		
         if (use_ssl) {
@@ -120,17 +120,3 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
         return false;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

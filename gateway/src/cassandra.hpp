@@ -15,9 +15,10 @@
 #include <cql/cql_execute.hpp>
 #include <cql/cql_result.hpp>
 
-bool checkToken(char *inToken, char *internalToken, bool use_ssl);
+#define CASSANDRA_IP "127.0.0.1"
+// We are using the CQL port, not the Thrift one (that's 9160)
+#define CASSANDRA_PORT 9042
 
-#define CASSANDRA_PORT 9160
-#define CASSANDRA_IP "127.0.0.1" // Might need this b/c using different IP known internally
+bool checkToken(char *inToken, char *internalToken, bool use_ssl);
 
 #endif
