@@ -22,6 +22,7 @@ extern "C" {
 #include "gateway.hpp"
 #include "helpers.hpp"
 //#include "cassandra.hpp"
+using namespace std;
 
 const char *printable_opcodes[17] = {"ERROR", "STARTUP", "READY", "AUTHENTICATE", "CREDENTIALS", "OPTIONS", "SUPPORTED", "QUERY", "RESULT", "PREPARE", "EXECUTE", "REGISTER", "EVENT", "BATCH", "AUTH_CHALLENGE", "AUTH_RESPONSE", "AUTH_SUCCESS"};
 
@@ -606,115 +607,6 @@ void* HandleConn(void* thread_data) {
     return NULL;
 }
 
-char* prefix_cmd(char *cql_cmd, char *prefix){
-	pcre *reCompiled;
-	pcre_extra *pcreExtra;
-	const char *pcreErrorStr;
-	int pcreErrorOffset;
-	int subStrVec[30];
-	const char *psubStrMatchStr;
-	char *p_string = (char *)malloc(100);
-	int i = 0, j = 0;
-	int length;
-	int pcreExecRet;
-	const char *aStrRegex;
-
-	//chomp newline character and replace whenever found
-	length = strlen(cql_cmd);
-	while(j < length){
-		if(cql_cmd[j] == '\n'){
-			cql_cmd[j] = ' ';
-		}
-		j++;
-	}
-
-	//Regex to match
-	aStrRegex = "USE[ ]+(.*);";
-	printf("Regex to use: %s, %s\n", aStrRegex, prefix);
-
-	reCompiled = pcre_compile(aStrRegex, 0, &pcreErrorStr,
-			&pcreErrorOffset, NULL );
-
-	if(reCompiled == NULL){
-		printf("ERROR: Compilation failed: '%s'", pcreErrorStr);
-		exit(1);
-	}
-
-	// Regex optimization
-	pcreExtra = pcre_study(reCompiled, 0, &pcreErrorStr);
-	if(pcreErrorStr != NULL) {
-		printf("ERROR: Something went wrong in optimization attempt:'%s'\n", pcreErrorStr);
-		exit(1);
-	}
-
-	pcreExecRet = pcre_exec(reCompiled,
-			pcreExtra,
-			cql_cmd,
-			strlen(cql_cmd),
-			0,
-			0,
-			subStrVec,
-			30);
-	if(pcreExecRet < 0) {
-		switch(pcreExecRet){
-			case PCRE_ERROR_NOMATCH     :printf("String did not match\n");
-						     break;
-			case PCRE_ERROR_NULL        :printf("Encountered null\n");
-						     break;
-			case PCRE_ERROR_BADOPTION   :printf("A bad option was passed\n");
-						     break;
-			case PCRE_ERROR_BADMAGIC    :printf("Magic number bad\n");
-						     break;
-			case PCRE_ERROR_UNKNOWN_NODE:printf("Something bad in recompiled regex\n");
-						     break;
-			case PCRE_ERROR_NOMEMORY    :printf("Ran out of memory\n");
-						     break;
-			default                     :printf("Unknown error\n");
-						     break;
-		}
-	}
-	else{
-		printf("######A match was found#######\n");
-
-		if(pcreExecRet == 0){
-			printf("Too many substrings for substring vector\n");
-			pcreExecRet = 10;
-		}
-
-		for(i=0;i<pcreExecRet;i++){
-			pcre_get_substring(cql_cmd, subStrVec, pcreExecRet, i, &(psubStrMatchStr));
-			printf("Match(%2d/%2d): (%2d,%2d): '%s'\n", i, pcreExecRet-1,subStrVec[i*2],subStrVec[i*2+1], psubStrMatchStr);
-			if(i){
-				strcpy(p_string, psubStrMatchStr);
-				prepend(p_string, "USE 123abc");
-				printf("Result of processing: %s\n", p_string);
-			}
-
-		}
-		pcre_free_substring(psubStrMatchStr);
-	}
-	pcre_free(reCompiled);
-
-	if(pcreExtra != NULL){
-		pcre_free(pcreExtra);
-	}
-
-	return p_string;
-}
-
-void prepend(char* s, const char* t)
-{
-	size_t len = strlen(t);
-	size_t i;
-
-	memmove(s + len, s, len + 1);
-
-	for (i = 0; i < len; ++i)
-	{
-		s[i] = t[i];
-	}
-}
-
 const char* process_cql_command(char *cql_cmd, char *prefix){
 	std::string cmd = cql_cmd;	
 	std::string pfix = prefix;
@@ -722,15 +614,48 @@ const char* process_cql_command(char *cql_cmd, char *prefix){
 	boost::regex expression("USE[ ]+(.*);");
 	//check if CQL command matches regex
 	if(boost::regex_match(cmd, expression)){		
-		cmd.replace(4, 0, pfix); 
+		//cmd.replace(4, 0, pfix); 
 	}
 
 	return cmd.c_str();
 
 }
 
+std::string process_cql_cmd(std::string cmd, const string prefix){
+	boost::regex keyspace_name("USE (.*?);");
+	return testSearch(keyspace_name, cmd, prefix);
 
+}
 
+std::string testSearch(const boost::regex &ex, const std::string st, const std::string prefix) {
+	cout << "Searching " << st << endl;
+	string::const_iterator start, end;
+	start = st.begin();
+	end = st.end();
+	boost::match_results<std::string::const_iterator> what;
+	boost::match_flag_type flags = boost::match_default;
+	std::string s("");
+	std::string use("USE ");
+        std::string use_prefix("USE " + prefix);
+	while(boost::regex_search(start, end, what, ex, flags))
+	{
+		std::string str(what.str());
+		custom_replace(str, use, use_prefix);
+		s += str;
+		//cout << s << endl;
+
+		start = what[0].second;
+	}
+	return s;
+}
+
+bool custom_replace(std::string& str, const std::string& from, const std::string& to) {
+	size_t start_pos = str.find(from);
+	if(start_pos == std::string::npos)
+		return false;
+	str.replace(start_pos, from.length(), to);
+	return true;
+}
 
 
 
