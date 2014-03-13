@@ -95,8 +95,6 @@ typedef struct {
 #define CQL_ERROR_UNPREPARED            0x2500
 
 void* HandleConn(void* thread_data);
-std::string process_cql_cmd(std::string cmd, const std::string prefix);
-const char* process_cql_command(char *cql_cmd, char *prefix);
+std::string process_cql_cmd(std::string st, const std::string prefix);
 bool custom_replace(std::string& str, const std::string& from, const std::string& to);
-std::string testSearch(const boost::regex &ex, const std::string st, const std::string prefix); 
 #endif

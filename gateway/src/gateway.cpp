@@ -21,6 +21,10 @@ extern "C" {
 }
 #include "gateway.hpp"
 #include "helpers.hpp"
+#include <boost/regex.hpp>
+#include <boost/algorithm/string/regex.hpp>
+#include <vector>
+#include <string>
 //#include "cassandra.hpp"
 using namespace std;
 
@@ -606,48 +610,54 @@ void* HandleConn(void* thread_data) {
 
     return NULL;
 }
-
-const char* process_cql_command(char *cql_cmd, char *prefix){
-	std::string cmd = cql_cmd;	
-	std::string pfix = prefix;
-	//std::string use_regex = "USE[ ]+(.*);";
-	boost::regex expression("USE[ ]+(.*);");
-	//check if CQL command matches regex
-	if(boost::regex_match(cmd, expression)){		
-		//cmd.replace(4, 0, pfix); 
-	}
-
-	return cmd.c_str();
-
-}
-
-std::string process_cql_cmd(std::string cmd, const string prefix){
-	boost::regex keyspace_name("USE (.*?);");
-	return testSearch(keyspace_name, cmd, prefix);
-
-}
-
-std::string testSearch(const boost::regex &ex, const std::string st, const std::string prefix) {
-	cout << "Searching " << st << endl;
+using namespace std;
+std::string process_cql_cmd(std::string st, const std::string prefix) {
+	//cout << "Searching " << st << endl;
+	std::string use("USE");
+	std::string from("from");
+	boost::regex exp("USE (.*?);");
+	int i = 0;
+	//create array of regex expressions
+	std::vector<std::string> my_exps;
+	//my_exps.push_back(boost::regex("USE (.*?);"));
+	my_exps.push_back(std::string("from (.*?)[//s|;]"));
+	my_exps.push_back(std::string("USE (.*?);"));
 	string::const_iterator start, end;
 	start = st.begin();
 	end = st.end();
 	boost::match_results<std::string::const_iterator> what;
 	boost::match_flag_type flags = boost::match_default;
 	std::string s("");
-	std::string use("USE ");
-        std::string use_prefix("USE " + prefix);
-	while(boost::regex_search(start, end, what, ex, flags))
-	{
-		std::string str(what.str());
-		custom_replace(str, use, use_prefix);
-		s += str;
-		//cout << s << endl;
+	int size = my_exps.size();
+	for (; i < size ;i++){
+		boost::regex exp(my_exps.at(i));
+		cout << i << my_exps.at(i) << endl;
+		while(boost::regex_search(start, end, what, exp, flags))
+		{
+			std::string str(what.str());
+			vector <string> fields;
+			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
+			cout << str << endl;
+			if(fields[0].compare(use) == 0){
+				std::string app( "USE " + prefix + fields[1]);
+				//              cout << "Post processing: " << app << endl;
+				custom_replace(st, str, app);
+			} else if (fields[0].compare(from) == 0){
+				cout << "Tirimo" << endl;
+				std::string app( "from " + prefix + fields[1]);
+				custom_replace(st, str, app);
+			}
+			s += str;
+			//              cout << str << endl;
 
-		start = what[0].second;
+			start = what[0].second;
+		}
+		start = st.begin();
+		end = st.end();
 	}
-	return s;
+	return st;
 }
+
 
 bool custom_replace(std::string& str, const std::string& from, const std::string& to) {
 	size_t start_pos = str.find(from);
