@@ -617,21 +617,29 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	std::string use("USE");
 	std::string from("from");
 	std::string keyspace("KEYSPACE");
+
+	//initialize map of replacements
+	std::map<std::string, std::string> replacements;
+	std::map<std::string, std::string>::iterator traverser;
 	int i = 0;
 	//create array of regex expressions
 	std::vector<std::string> my_exps;
-	//my_exps.push_back(boost::regex("USE (.*?);"));
+
+	//push various regular expressions
 	my_exps.push_back(std::string("from (.*?)[//s|;]"));
 	my_exps.push_back(std::string("USE (.*?);"));
-	my_exps.push_back(std::string("KEYSPACE (.*?)[//s|;]"));
+	my_exps.push_back(std::string("KEYSPACE (.*?);"));
+	int size = my_exps.size();
 	string::const_iterator start, end;
 	start = st.begin();
 	end = st.end();
 	boost::match_results<std::string::const_iterator> what;
 	boost::match_flag_type flags = boost::match_default;
-	int size = my_exps.size();
+
+	//Find matches and prefix keyspaces
 	for (; i < size ;i++){
 		boost::regex exp(my_exps.at(i));
+		//cout << "Inside for: "<< i << endl;
 		while(boost::regex_search(start, end, what, exp, flags))
 		{
 			std::string str(what.str());
@@ -640,21 +648,24 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
-				//              cout << "Post processing: " << app << endl;
-				custom_replace(st, str, app);
+				replacements[str] = app;
 			} else if (fields[0].compare(from) == 0){
-				cout << "Tirimo" << endl;
 				std::string app( "from " + prefix + fields[1]);
-				custom_replace(st, str, app);
-			}  else if (fields[0].compare(keyspace) == 0){
-                                std::string app( "KEYSPACE " + prefix + fields[1]);
-                                custom_replace(st, str, app);
-                        }
+				replacements[str] = app;
+			} else if (fields[0].compare(keyspace) == 0){
+				std::string app( "KEYSPACE " + prefix + fields[1]);
+				replacements[str] = app;
 
+			}
 			start = what[0].second;
 		}
 		start = st.begin();
 		end = st.end();
+	}
+	//perform replacements on supplied query
+	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){
+		//cout << traverser->first << ": " << traverser->second <<endl; 
+		custom_replace(st, traverser->first, traverser->second);
 	}
 	return st;
 }
@@ -667,10 +678,3 @@ bool custom_replace(std::string& str, const std::string& from, const std::string
 	str.replace(start_pos, from.length(), to);
 	return true;
 }
-
-
-
-
-
-
-
