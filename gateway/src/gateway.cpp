@@ -23,6 +23,7 @@ extern "C" {
 #include "helpers.hpp"
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/algorithm/string.hpp>
 #include <vector>
 #include <string>
 //#include "cassandra.hpp"
@@ -615,29 +616,28 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	//cout << "Searching " << st << endl;
 	std::string use("USE");
 	std::string from("from");
-	boost::regex exp("USE (.*?);");
+	std::string keyspace("KEYSPACE");
 	int i = 0;
 	//create array of regex expressions
 	std::vector<std::string> my_exps;
 	//my_exps.push_back(boost::regex("USE (.*?);"));
 	my_exps.push_back(std::string("from (.*?)[//s|;]"));
 	my_exps.push_back(std::string("USE (.*?);"));
+	my_exps.push_back(std::string("KEYSPACE (.*?)[//s|;]"));
 	string::const_iterator start, end;
 	start = st.begin();
 	end = st.end();
 	boost::match_results<std::string::const_iterator> what;
 	boost::match_flag_type flags = boost::match_default;
-	std::string s("");
 	int size = my_exps.size();
 	for (; i < size ;i++){
 		boost::regex exp(my_exps.at(i));
-		cout << i << my_exps.at(i) << endl;
 		while(boost::regex_search(start, end, what, exp, flags))
 		{
 			std::string str(what.str());
+			boost::trim(str);
 			vector <string> fields;
 			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
-			cout << str << endl;
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
 				//              cout << "Post processing: " << app << endl;
@@ -646,9 +646,10 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 				cout << "Tirimo" << endl;
 				std::string app( "from " + prefix + fields[1]);
 				custom_replace(st, str, app);
-			}
-			s += str;
-			//              cout << str << endl;
+			}  else if (fields[0].compare(keyspace) == 0){
+                                std::string app( "KEYSPACE " + prefix + fields[1]);
+                                custom_replace(st, str, app);
+                        }
 
 			start = what[0].second;
 		}
