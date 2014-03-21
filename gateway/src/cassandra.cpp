@@ -4,13 +4,45 @@
  */
 
 #include "cassandra.hpp"
-
+using boost::shared_ptr;
 // This function is called asynchronously every time an event is logged
 void
 log_callback(const cql::cql_short_t, const std::string& message)
 {
     std::cout << "LOG: " << message << std::endl;
 }
+
+
+shared_ptr<cql::cql_builder_t> initCassandraBuilder(bool use_ssl){
+    using namespace cql;
+    using boost::shared_ptr;
+    
+    // Init CQL
+    cql_initialize();
+    
+    try{
+        // listening at default port plus one (9042 + 1).
+        shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
+        builder->with_log_callback(&log_callback);
+        builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP), CASSANDRA_PORT + 1);
+
+
+        if (use_ssl) {
+            builder->with_ssl();
+        }
+
+	        
+        return builder;
+    }
+    catch (std::exception& e)
+    {
+        std::cout << "Exception: " << e.what() << std::endl;
+        exit(1);
+    }
+}
+
+
+
 
 /*
  * Returns true on success, false on failure (auth or otherwise)
@@ -21,29 +53,12 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
     using namespace cql;
     using boost::shared_ptr;
     
-    // Init CQL
-    cql_initialize();
-    //cql_thread_infrastructure_t cql_ti;
-    
-    
     (void)internalToken; // Ugh ... c++ does not like "set but not used"
     
     try{
     
-		// listening at default port plus one (9042 + 1).
-        shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
-        builder->with_log_callback(&log_callback);
-        builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP), CASSANDRA_PORT + 1);
-		
-		
-        if (use_ssl) {
-        builder->with_ssl();
-        }
-		
-		
-		// Now build a model of cluster and connect it to DB.
-        shared_ptr<cql::cql_cluster_t> cluster(builder->build());
-        shared_ptr<cql::cql_session_t> session(cluster->connect());
+		shared_ptr<cql::cql_cluster_t> cluster(initCassandraBuilder(use_ssl)->build());
+        shared_ptr<cql::cql_session_t> session(cluster->connect());	
 		
         if (session) {
             boost::shared_ptr<cql::cql_query_t> use_system(
@@ -111,7 +126,8 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             
             session->close();
         }
-		cluster->shutdown();
+	    cluster->shutdown();
+		// TODO: Can I shutdown the cluster? 
 		return true;
     }
     catch (std::exception& e)
@@ -120,3 +136,28 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
         return false;
     }
 }
+
+/*
+* To be called whenever a new cassandra instance is created
+* 
+
+bool initCassandraInstance(){
+	
+}
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
