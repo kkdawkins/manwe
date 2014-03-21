@@ -615,9 +615,9 @@ using namespace std;
 std::string process_cql_cmd(std::string st, const std::string prefix) {
 	//cout << "Searching " << st << endl;
 	std::string use("USE");
-	std::string from("from");
+	std::string from("FROM");
 	std::string keyspace("KEYSPACE");
-
+	std::string into("INTO");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -626,9 +626,10 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	std::vector<std::string> my_exps;
 
 	//push various regular expressions
-	my_exps.push_back(std::string("from (.*?)[//s|;]"));
+	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("USE (.*?);"));
 	my_exps.push_back(std::string("KEYSPACE (.*?);"));
+	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
 	int size = my_exps.size();
 	string::const_iterator start, end;
 	start = st.begin();
@@ -656,7 +657,12 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 				std::string app( "KEYSPACE " + prefix + fields[1]);
 				replacements[str] = app;
 
-			}
+			} else if(fields[0].compare(into) == 0){
+                                std::string app( "INTO " + prefix + fields[1]);
+                                replacements[str] = app;
+
+                        }
+
 			start = what[0].second;
 		}
 		start = st.begin();
