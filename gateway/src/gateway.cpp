@@ -618,6 +618,7 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	std::string from("FROM");
 	std::string keyspace("KEYSPACE");
 	std::string into("INTO");
+	std::string update("UPDATE");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -630,6 +631,7 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	my_exps.push_back(std::string("USE (.*?);"));
 	my_exps.push_back(std::string("KEYSPACE (.*?);"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
+	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	int size = my_exps.size();
 	string::const_iterator start, end;
 	start = st.begin();
@@ -651,18 +653,18 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;
 			} else if (fields[0].compare(from) == 0){
-				std::string app( "from " + prefix + fields[1]);
+				std::string app( "FROM " + prefix + fields[1]);
 				replacements[str] = app;
 			} else if (fields[0].compare(keyspace) == 0){
 				std::string app( "KEYSPACE " + prefix + fields[1]);
 				replacements[str] = app;
-
 			} else if(fields[0].compare(into) == 0){
                                 std::string app( "INTO " + prefix + fields[1]);
                                 replacements[str] = app;
-
+                        } else if(fields[0].compare(update) == 0){
+                                std::string app( "UPDATE" + prefix + fields[1]);
+                                replacements[str] = app;
                         }
-
 			start = what[0].second;
 		}
 		start = st.begin();
