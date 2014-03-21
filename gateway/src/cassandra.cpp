@@ -201,11 +201,11 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
 /*
 * To be called whenever a new cassandra instance is created
 * 
-
-bool initCassandraInstance(){
-	
-}
 */
+bool initCassandraInstance(){
+	return false;
+}
+
 
 
 
