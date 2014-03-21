@@ -623,6 +623,10 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
 	int i = 0;
+
+	//special handler variable for nested tables
+	std::size_t found;
+	std::string dot(".");
 	//create array of regex expressions
 	std::vector<std::string> my_exps;
 
@@ -662,7 +666,7 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
                                 std::string app( "INTO " + prefix + fields[1]);
                                 replacements[str] = app;
                         } else if(fields[0].compare(update) == 0){
-                                std::string app( "UPDATE" + prefix + fields[1]);
+                                std::string app( "UPDATE " + prefix + fields[1]);
                                 replacements[str] = app;
                         }
 			start = what[0].second;
@@ -672,7 +676,11 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	}
 	//perform replacements on supplied query
 	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){
-		//cout << traverser->first << ": " << traverser->second <<endl; 
+
+		found=traverser->second.find('.');
+		if (found!=std::string::npos){
+			custom_replace(traverser->second, dot, dot+prefix);
+		}
 		custom_replace(st, traverser->first, traverser->second);
 	}
 	return st;
