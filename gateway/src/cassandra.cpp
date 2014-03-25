@@ -99,10 +99,10 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
     	
         if (session) {
             #if DEBUG
-                std::cout << "[cassandra.cpp checkToken] Query - Use System.\n";
+                std::cout << "[cassandra.cpp checkToken] Query - USE multiTenantCassandra.\n";
             #endif
             boost::shared_ptr<cql::cql_query_t> use_system(
-            new cql::cql_query_t("USE system;", cql::CQL_CONSISTENCY_ONE));
+            new cql::cql_query_t("USE multiTenantCassandra;", cql::CQL_CONSISTENCY_ONE));
             
             // send the query to Cassandra
             boost::shared_future<cql::cql_future_result_t> future = session->query(use_system);
@@ -116,7 +116,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             if(future.get().error.is_err()){
                 // Alert of error?
-                std::cout << "Use System failed.";
+                std::cout << "USE multiTenantCassandra failed.";
                 internalToken = NULL;
                 return false;
             }
@@ -125,7 +125,8 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             // Execute a query where we attempt to find an internal token
             boost::shared_ptr<cql::cql_query_t> select_internal(
-                new cql::cql_query_t("SELECT internalToken FROM tokentable WHERE usertoken=?;", cql::CQL_CONSISTENCY_ONE));
+                new cql::cql_query_t("SELECT internalToken FROM tokenTable WHERE userToken=?;", cql::CQL_CONSISTENCY_ONE));
+                // FIXME need to also verify that the token is still valid based on the expiration timestamp
                 
              // compile the parametrized query on the server
             future = session->prepare(select_internal);
