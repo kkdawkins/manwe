@@ -19,14 +19,17 @@ extern "C" {
 #include <sys/types.h>
 
 }
+
+#include "cassandra.hpp"
 #include "gateway.hpp"
 #include "helpers.hpp"
+
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
 #include <boost/algorithm/string.hpp>
 #include <vector>
 #include <string>
-//#include "cassandra.hpp"
+
 using namespace std;
 
 const char *printable_opcodes[17] = {"ERROR", "STARTUP", "READY", "AUTHENTICATE", "CREDENTIALS", "OPTIONS", "SUPPORTED", "QUERY", "RESULT", "PREPARE", "EXECUTE", "REGISTER", "EVENT", "BATCH", "AUTH_CHALLENGE", "AUTH_RESPONSE", "AUTH_SUCCESS"};
@@ -435,7 +438,10 @@ void* HandleConn(void* thread_data) {
                             break;
                         }
                         else {
-                            strncpy(token, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
+                            char *userToken = (char *)malloc(TOKEN_LENGTH + 1);
+                            memset(userToken, 0, TOKEN_LENGTH + 1);
+
+                            strncpy(userToken, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
                             char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
                             memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
                             strncpy(username, sm->value + TOKEN_LENGTH, strlen(sm->value) - TOKEN_LENGTH);
@@ -444,11 +450,35 @@ void* HandleConn(void* thread_data) {
                             free(username);
 
                             #if DEBUG
-                            printf("%u:       Token: %s\n", (uint32_t)tid, token);
+                            printf("%u:       Token: %s\n", (uint32_t)tid, userToken);
                             printf("%u:       Username: %s\n", (uint32_t)tid, sm->value);
                             #endif
 
-                            // FIXME need to validate supplied token here. If valid, continue, otherwise send back error to client
+                            // Now, validate that the supplied token is valid
+                            if (checkToken(userToken, token, false)) { // User token is valid
+                                #if DEBUG
+                                printf("%u:       Internal Token: %s\n", (uint32_t)tid, token);
+                                #endif
+
+                                // Nothing else to do, as the checkToken function sets the contents of 'token' before returning.
+
+                                free(userToken);
+                            }
+                            else { // User token is invalid
+                                #if DEBUG
+                                printf("%u:       Error - Token supplied is not valid.\n", (uint32_t)tid);
+                                #endif
+
+                                char msg[] = "Token supplied is not valid";
+                                SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_BAD_CREDENTIALS, msg);
+
+                                free(userToken);
+                                FreeStringMap(head);
+                                head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
+                                free(packet);
+                                close(connfd);
+                                break;
+                            }
                         }
                     }
 

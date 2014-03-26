@@ -4,6 +4,8 @@
  */
 
 #include "cassandra.hpp"
+#include "gateway.hpp"
+
 using boost::shared_ptr;
 // This function is called asynchronously every time an event is logged
 void
@@ -34,6 +36,11 @@ shared_ptr<cql::cql_builder_t> initCassandraBuilder(bool use_ssl){
         builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP), CASSANDRA_PORT + 1);
         #if DEBUG
             std::cout << "[cassandra.cpp initCassandraBuilder] Builder Cluster Contact point Created.\n";
+        #endif
+
+        builder->with_credentials(CASSANDRA_ROOT_USERNAME, CASSANDRA_ROOT_PASSWORD);
+        #if DEBUG
+            std::cout << "[cassandra.cpp initCassandraBuilder] Set 'root' username and password for Cassandra.\n";
         #endif
 
         if (use_ssl) {
@@ -116,7 +123,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             if(future.get().error.is_err()){
                 // Alert of error?
-                std::cout << "USE multiTenantCassandra failed.";
+                printf("'USE multiTenantCassandra' failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
                 return false;
             }
@@ -136,7 +143,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             if(future.get().error.is_err()){
                 // Alert of error?
-                std::cout << "Statement prepare failed.";
+                printf("Statement prepare failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
                 return false;               
             }
@@ -163,7 +170,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             if(future.get().error.is_err()){
                 // Alert of error?
-                std::cout << "User token query failed.";
+                printf("User token query failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
                 return false;               
             }
@@ -171,10 +178,16 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 std::cout << "[cassandra.cpp checkToken] Computing query result.\n";
             #endif
             if (future.get().result) {
+                #if DEBUG
+                assert((*future.get().result).column_count() == 1);
+                #endif
+
+                (*future.get().result).next(); // Need to advance to the first column returned
+
                 cql::cql_byte_t* data = NULL;
                 cql::cql_int_t size = 0;
                 (*future.get().result).get_data(0 /* Index */, &data, size);
-                internalToken = reinterpret_cast<char*>(data);
+                strncpy(internalToken, reinterpret_cast<char*>(data), TOKEN_LENGTH);
             }else{
                 // There was no user token found. Normal fail case.
                 internalToken = NULL;

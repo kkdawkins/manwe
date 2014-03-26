@@ -28,6 +28,10 @@ extern "C" {
 // We are using the CQL port, not the Thrift one (that's 9160)
 #define CASSANDRA_PORT 9042
 
+// Need to know the "root" username and password so we can directly connect to Cassandra to verify token information
+#define CASSANDRA_ROOT_USERNAME "cassandra"
+#define CASSANDRA_ROOT_PASSWORD "cassandra"
+
 //40 byte tokens will be used
 #define TOKEN_LENGTH 40
 
