@@ -501,6 +501,93 @@ void* HandleConn(void* thread_data) {
                 printf("%u:   Finished with CREDENTIALS, passing to Cassandra.\n", (uint32_t)tid);
                 #endif
             }
+            else if (packet->opcode == CQL_OPCODE_QUERY) { // Rewrite CQL queries if needed
+
+                #if DEBUG
+                printf("%u:   Handling QUERY packet to (possibly) prepend the internal token.\n", (uint32_t)tid);
+                #endif
+
+                int32_t query_len;
+                memcpy(&query_len, (char *)packet + header_len, 4);
+                query_len = ntohl(query_len);
+                char *query = (char *)malloc(query_len + 1);
+                memset(query, 0, query_len + 1);
+                memcpy(query, (char *)packet + header_len + 4, query_len);
+                uint16_t consistency;
+                memcpy(&consistency, (char *)packet + header_len + 4 + query_len, 2);
+
+                #if DEBUG
+                printf("%u:     Query before rewrite: %s\n", (uint32_t)tid, query);
+                #endif
+
+                // Now, fixup the query before passing into Cassandra
+                std::string cpp_string = process_cql_cmd(query, token);
+                const char *new_query = cpp_string.c_str();
+
+                #if DEBUG
+                printf("%u:     Query after rewrite: %s\n", (uint32_t)tid, new_query);
+                #endif
+
+                query_len = strlen(new_query);
+                query_len = htonl(query_len);
+
+                cql_packet_t *new_packet = (cql_packet_t *)malloc(14 + strlen(new_query)); // 8 byte header, 4 byte int, new_query, 2 byte consistency
+                memcpy((char *)new_packet, packet, 8); // Copy header
+                memcpy((char *)new_packet + 8, &query_len, 4);
+                memcpy((char *)new_packet + 12, new_query, strlen(new_query));
+                memcpy((char *)new_packet + 12 + strlen(new_query), &consistency, 2);
+
+                free(packet);
+                packet = new_packet;
+                free(query);
+
+                #if DEBUG
+                printf("%u:   Finished with QUERY, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
+
+            }
+            else if (packet->opcode == CQL_OPCODE_PREPARE) { // Rewrite CQL queries if needed
+
+                #if DEBUG
+                printf("%u:   Handling PREPARE packet to (possibly) prepend the internal token.\n", (uint32_t)tid);
+                #endif
+
+                int32_t query_len;
+                memcpy(&query_len, (char *)packet + header_len, 4);
+                query_len = ntohl(query_len);
+                char *query = (char *)malloc(query_len + 1);
+                memset(query, 0, query_len + 1);
+                memcpy(query, (char *)packet + header_len + 4, query_len);
+
+                #if DEBUG
+                printf("%u:     Query before rewrite: %s\n", (uint32_t)tid, query);
+                #endif
+
+                // Now, fixup the query before passing into Cassandra
+                std::string cpp_string = process_cql_cmd(query, token);
+                const char *new_query = cpp_string.c_str();
+
+                #if DEBUG
+                printf("%u:     Query after rewrite: %s\n", (uint32_t)tid, new_query);
+                #endif
+
+                query_len = strlen(new_query);
+                query_len = htonl(query_len);
+
+                cql_packet_t *new_packet = (cql_packet_t *)malloc(12 + strlen(new_query)); // 8 byte header, 4 byte int, new_query
+                memcpy((char *)new_packet, packet, 8); // Copy header
+                memcpy((char *)new_packet + 8, &query_len, 4);
+                memcpy((char *)new_packet + 12, new_query, strlen(new_query));
+
+                free(packet);
+                packet = new_packet;
+                free(query);
+
+                #if DEBUG
+                printf("%u:   Finished with PREPARE, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
+
+            }
             else { // All other packets get processed elsewhere
                 // TODO
             }
