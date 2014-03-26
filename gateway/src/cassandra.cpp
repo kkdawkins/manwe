@@ -125,6 +125,8 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 // Alert of error?
                 printf("'USE multiTenantCassandra' failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
+                session->close();
+                cluster->shutdown();
                 return false;
             }
             #if DEBUG
@@ -132,7 +134,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #endif            
             // Execute a query where we attempt to find an internal token
             boost::shared_ptr<cql::cql_query_t> select_internal(
-                new cql::cql_query_t("SELECT internalToken FROM tokenTable WHERE userToken=?;", cql::CQL_CONSISTENCY_ONE));
+                new cql::cql_query_t("SELECT internalToken, expiration FROM tokenTable WHERE userToken=?;", cql::CQL_CONSISTENCY_ONE));
                 // FIXME need to also verify that the token is still valid based on the expiration timestamp
                 
              // compile the parametrized query on the server
@@ -145,6 +147,8 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 // Alert of error?
                 printf("Statement prepare failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
+                session->close();
+                cluster->shutdown();
                 return false;               
             }
             
@@ -172,38 +176,50 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 // Alert of error?
                 printf("User token query failed: '%s'\n", future.get().error.message.c_str());
                 internalToken = NULL;
+                session->close();
+                cluster->shutdown();
                 return false;               
             }
             #if DEBUG
                 std::cout << "[cassandra.cpp checkToken] Computing query result.\n";
             #endif
+
             if (future.get().result) {
-                #if DEBUG
-                assert((*future.get().result).column_count() == 1);
-                #endif
+                if ((*future.get().result).row_count() == 1) {
+                    (*future.get().result).next(); // Need to advance to the first row returned
 
-                (*future.get().result).next(); // Need to advance to the first column returned
-
-                cql::cql_byte_t* data = NULL;
-                cql::cql_int_t size = 0;
-                (*future.get().result).get_data(0 /* Index */, &data, size);
-                strncpy(internalToken, reinterpret_cast<char*>(data), TOKEN_LENGTH);
-            }else{
+                    cql::cql_byte_t* data = NULL;
+                    cql::cql_int_t size = 0;
+                    (*future.get().result).get_data(0 /* Index */, &data, size);
+                    strncpy(internalToken, reinterpret_cast<char*>(data), TOKEN_LENGTH);
+                }
+                else {
+                    // There was no user token found. Normal fail case.
+                    internalToken = NULL;
+                    session->close();
+                    cluster->shutdown();
+                    return false;
+                }
+            }
+            else {
                 // There was no user token found. Normal fail case.
+                // Note that we don't seem to hit this, since the resultSet in future.get().result is not null even if no results are returned
                 internalToken = NULL;
+                session->close();
+                cluster->shutdown();
                 return false;
             }
             #if DEBUG
-                std::cout << "[cassandra.cpp checkToken] Close the session.\n";
+            std::cout << "[cassandra.cpp checkToken] Close the session.\n";
             #endif
             session->close();
         }
         #if DEBUG
-                std::cout << "[cassandra.cpp checkToken] Shutdown cluster.\n";
+        std::cout << "[cassandra.cpp checkToken] Shutdown cluster.\n";
         #endif
-	    cluster->shutdown();
-		// TODO: Can I shutdown the cluster? 
-		return true;
+        cluster->shutdown();
+	// TODO: Can I shutdown the cluster? 
+	return true;
     }
     catch (std::exception& e)
     {
