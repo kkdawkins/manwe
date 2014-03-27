@@ -33,7 +33,7 @@ extern "C" {
 #define CASSANDRA_ROOT_PASSWORD "cassandra"
 
 //40 byte tokens will be used
-#define TOKEN_LENGTH 40
+#define TOKEN_LENGTH 20
 
 //
 // Documentation for the CQL binary protocol is avaiable at <https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol_v2.spec;hb=29670eb6692f239a3e9b0db05f2d5a1b5d4eb8b0>

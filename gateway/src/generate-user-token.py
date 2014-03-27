@@ -11,7 +11,7 @@ CASSANDRA_IP = "127.0.0.1"
 CASSANDRA_USERNAME = "cassandra"
 CASSANDRA_PASSWORD = "cassandra"
 
-TOKEN_LENGTH = 40
+TOKEN_LENGTH = 20
 
 
 
@@ -26,7 +26,7 @@ def main():
 
     print "Done!\n\nMaking sure proper keyspace and table(s) exist..."
 
-    session.execute("CREATE KEYSPACE IF NOT EXISTS multiTenantCassandra WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 3};")
+    session.execute("CREATE KEYSPACE IF NOT EXISTS multiTenantCassandra WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
     session.execute("USE multiTenantCassandra;")
     session.execute("""
 CREATE TABLE IF NOT EXISTS tokenTable (
@@ -45,14 +45,20 @@ CREATE TABLE IF NOT EXISTS tokenTable (
 
     print "Creating user tokens..."
 
-    internalToken = "%040x" % (random.randrange(16**TOKEN_LENGTH))
-    userToken = "%040x" % (random.randrange(16**TOKEN_LENGTH))
+    # Note that Cassanra requires that keyspace names begin with a letter, so we must make sure the internalToken does as well
+    internalToken = random.choice("abcdef")
+    internalToken += "%019x" % (random.randrange(16**(TOKEN_LENGTH-1)))
+    userToken = "%020x" % (random.randrange(16**TOKEN_LENGTH))
 
     # FIXME currently tokens do not expire unless revoked
     expire = 0
 
+    # Add the new tenant to the tokenTable
     cmd = session.prepare("INSERT INTO tokenTable (internalToken, userToken, userId, expiration, comment) VALUES (?, ?, ?, ?, ?);")
     session.execute(cmd, (internalToken, userToken, uid, expire, comment))
+
+    # Now, setup a tenant-specific "cassandra" default user
+    session.execute("CREATE USER '%scassandra' WITH PASSWORD 'cassandra' SUPERUSER;" % internalToken)
 
     print "Done!\n\nThe user token is '%s'." % (userToken)
 
