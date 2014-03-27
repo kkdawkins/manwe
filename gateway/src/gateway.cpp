@@ -159,7 +159,7 @@ void* HandleConn(void* thread_data) {
     memset(&cassandra_addr, 0, sizeof(cassandra_addr));
     cassandra_addr.sin_family = AF_INET;
     cassandra_addr.sin_addr.s_addr = inet_addr(CASSANDRA_IP);
-    cassandra_addr.sin_port = htons(CASSANDRA_PORT + 1 );
+    cassandra_addr.sin_port = htons(CASSANDRA_PORT + 1);
 
     // Bind the socket and port to the name
     if (connect(cassandrafd, (struct sockaddr*)&cassandra_addr, sizeof(cassandra_addr)) < 0) {
@@ -440,7 +440,7 @@ void* HandleConn(void* thread_data) {
                         else {
                             char *userToken = (char *)malloc(TOKEN_LENGTH + 1);
                             memset(userToken, 0, TOKEN_LENGTH + 1);
-
+//FIXME need to switch prefix token with the internal one
                             strncpy(userToken, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
                             char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
                             memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
@@ -533,6 +533,8 @@ void* HandleConn(void* thread_data) {
 
                 cql_packet_t *new_packet = (cql_packet_t *)malloc(14 + strlen(new_query)); // 8 byte header, 4 byte int, new_query, 2 byte consistency
                 memcpy((char *)new_packet, packet, 8); // Copy header
+                new_packet->length = 6 + strlen(new_query); // Fix the length field
+                new_packet->length = htonl(new_packet->length);
                 memcpy((char *)new_packet + 8, &query_len, 4);
                 memcpy((char *)new_packet + 12, new_query, strlen(new_query));
                 memcpy((char *)new_packet + 12 + strlen(new_query), &consistency, 2);
@@ -576,6 +578,8 @@ void* HandleConn(void* thread_data) {
 
                 cql_packet_t *new_packet = (cql_packet_t *)malloc(12 + strlen(new_query)); // 8 byte header, 4 byte int, new_query
                 memcpy((char *)new_packet, packet, 8); // Copy header
+                new_packet->length = 4 + strlen(new_query); // Fix the length field
+                new_packet->length = htonl(new_packet->length);
                 memcpy((char *)new_packet + 8, &query_len, 4);
                 memcpy((char *)new_packet + 12, new_query, strlen(new_query));
 
