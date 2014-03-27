@@ -188,10 +188,27 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 if ((*future.get().result).row_count() == 1) {
                     (*future.get().result).next(); // Need to advance to the first row returned
 
-                    cql::cql_byte_t* data = NULL;
-                    cql::cql_int_t size = 0;
+                    cql::cql_byte_t* data = (cql::cql_byte_t*)malloc(sizeof(cql::cql_byte_t));
+                    cql::cql_int_t size = sizeof(cql::cql_byte_t);
+                    int expiration;
+
+                    // Get the internal token
                     (*future.get().result).get_data(0 /* Index */, &data, size);
                     strncpy(internalToken, reinterpret_cast<char*>(data), TOKEN_LENGTH);
+                    
+                    // Get the expiration
+                    data = (cql::cql_byte_t*)malloc(sizeof(cql::cql_int_t));
+                    size = sizeof(cql::cql_int_t);
+                    (*future.get().result).get_data(1 /* Index */, &data, size);
+                    expiration = atoi(reinterpret_cast<char*>(data));
+                    
+                    // Failure case, such that we carry on given a valid expiration 
+                    if(expiration != 0 && expiration <= static_cast<long int>(time(NULL))){
+                        internalToken = NULL;
+                        session->close();
+                        cluster->shutdown();
+                        return false;
+                    }
                 }
                 else {
                     // There was no user token found. Normal fail case.
