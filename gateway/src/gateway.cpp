@@ -159,7 +159,7 @@ void* HandleConn(void* thread_data) {
     memset(&cassandra_addr, 0, sizeof(cassandra_addr));
     cassandra_addr.sin_family = AF_INET;
     cassandra_addr.sin_addr.s_addr = inet_addr(CASSANDRA_IP);
-    cassandra_addr.sin_port = htons(CASSANDRA_PORT + 1);
+    cassandra_addr.sin_port = htons(CASSANDRA_PORT + 1 );
 
     // Bind the socket and port to the name
     if (connect(cassandrafd, (struct sockaddr*)&cassandra_addr, sizeof(cassandra_addr)) < 0) {
@@ -744,6 +744,8 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	//special handler variable for nested tables
 	std::size_t found;
 	std::string dot(".");
+	std::string sys("system");
+	int flag = 0;
 	//create array of regex expressions
 	std::vector<std::string> my_exps;
 
@@ -770,23 +772,30 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 			boost::trim(str);
 			vector <string> fields;
 			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
-			if(fields[0].compare(use) == 0){
+			found = fields[1].find(sys);
+                        if (found != std::string::npos){
+                                cout << "System table found at pos: " << found << endl;
+                                flag = 1;
+                        }
+
+			if(fields[0].compare(use) == 0 && !flag){
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;
-			} else if (fields[0].compare(from) == 0){
+			} else if (fields[0].compare(from) == 0 && !flag){
 				std::string app( "FROM " + prefix + fields[1]);
 				replacements[str] = app;
-			} else if (fields[0].compare(keyspace) == 0){
+			} else if (fields[0].compare(keyspace) == 0 && !flag){
 				std::string app( "KEYSPACE " + prefix + fields[1]);
 				replacements[str] = app;
-			} else if(fields[0].compare(into) == 0){
+			} else if(fields[0].compare(into) == 0 && !flag){
                                 std::string app( "INTO " + prefix + fields[1]);
                                 replacements[str] = app;
-                        } else if(fields[0].compare(update) == 0){
+                        } else if(fields[0].compare(update) == 0 && !flag){
                                 std::string app( "UPDATE " + prefix + fields[1]);
                                 replacements[str] = app;
                         }
 			start = what[0].second;
+			flag = 0;
 		}
 		start = st.begin();
 		end = st.end();
