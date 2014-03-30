@@ -5,8 +5,10 @@
 # all possible CQL commands.
 
 # There are two ways to run this test: directly against Cassandra (currently the default), or against the gateway.
-# Running against Cassandra directly should produce no errors. When running against the gateway, any error indicates a bug in our code.
-# To switch the mode, change the port (9043 for Cassandra, 9042 for gateway) and add or remove a user token to the username as needed.
+# Running against Cassandra directly should produce no errors. (If there are, try removing all of Cassandra's databases with
+# `rm -rf /var/lib/cassandra/*`, then restart Cassandra. Of course, this will dump all data stored in Cassandra!) When running
+# against the gateway, any error indicates a bug in our code. To switch the mode, change the port (9043 for Cassandra, 9042
+# for gateway) and add or remove a user token to the username as needed.
 
 # Important -- The tests assume being run in a new tenant instance. That is, re-running a series of tests again as the
 #              same tenant may produce incorrect results.
@@ -121,6 +123,33 @@ class TestCassandraQueries(unittest.TestCase):
         self._session.execute("USE system;")
         self._session.execute("USE system_auth;")
         self._session.execute("USE system_traces;")
+
+    ########## Misc / unusual CQL queries ##########
+
+    def test_whitepace_and_capitalization(self):
+        ########## Test various weird (but valid) whitespace and capitalization variations ##########
+
+        # All queries should run without error
+        self._session.execute("use system;")
+        self._session.execute("use \"system\";")
+        self._session.execute("UsE system;")
+        self._session.execute("USE SyStEm;")
+        self._session.execute("USE\n\n\t\n\n\n\t\t\t\t\tsystem\n;")
+        self._session.execute("select cluster_name from local;")
+        self._session.execute("select                                                       cluster_name FROM local;")
+        self._session.execute("Select \"cluster_name\" from local;")
+        self._session.execute("Select cluster_name from \"local\";")
+        self._session.execute("select\ncluster_name\nfrom\nlocal\n;")
+
+        # These should return errors
+        with self.assertRaisesRegexp(InvalidRequest, "code=2200 \[Invalid query\] message=\"Keyspace 'blah' does not exist\""):
+            self._session.execute("USe \"blah\";")
+        with self.assertRaisesRegexp(InvalidRequest, "code=2200 \[Invalid query\] message=\"Keyspace 'blah' does not exist\""):
+            self._session.execute("USE\n\nblah;")
+        with self.assertRaisesRegexp(InvalidRequest, "code=2200 \[Invalid query\] message=\"Keyspace 'blah' does not exist\""):
+            self._session.execute("USE                            \n\t\tblah;")
+        with self.assertRaisesRegexp(InvalidRequest, "code=2200 \[Invalid query\] message=\"unconfigured columnfamily blah\""):
+            self._session.execute("select cluster_name from \"blah\";")
 
 # Run the tests!
 suite = unittest.TestLoader().loadTestsFromTestCase(TestCassandraQueries)
