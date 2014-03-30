@@ -734,12 +734,12 @@ void* HandleConn(void* thread_data) {
 }
 using namespace std;
 std::string process_cql_cmd(std::string st, const std::string prefix) {
-	//cout << "Searching " << st << endl;
 	std::string use("USE");
 	std::string from("FROM");
 	std::string keyspace("KEYSPACE");
 	std::string into("INTO");
 	std::string update("UPDATE");
+	std::string schema("SCHEMA");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -749,14 +749,13 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 	std::size_t found;
 	std::string dot(".");
 	std::string sys("system");
-	int flag = 0;
 	//create array of regex expressions
 	std::vector<std::string> my_exps;
 
 	//push various regular expressions
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("USE (.*?);"));
-	my_exps.push_back(std::string("KEYSPACE (.*?);"));
+	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	int size = my_exps.size();
@@ -778,28 +777,36 @@ std::string process_cql_cmd(std::string st, const std::string prefix) {
 			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
 			found = fields[1].find(sys);
                         if (found != std::string::npos){
-                                cout << "System table found at pos: " << found << endl;
-                                flag = 1;
+                                start = what[0].second;
+				continue;
                         }
 
-			if(fields[0].compare(use) == 0 && !flag){
+			if(fields[0].compare(use) == 0 ){
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;
-			} else if (fields[0].compare(from) == 0 && !flag){
+			} else if (fields[0].compare(from) == 0 ){
 				std::string app( "FROM " + prefix + fields[1]);
 				replacements[str] = app;
-			} else if (fields[0].compare(keyspace) == 0 && !flag){
-				std::string app( "KEYSPACE " + prefix + fields[1]);
-				replacements[str] = app;
-			} else if(fields[0].compare(into) == 0 && !flag){
+			} else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
+                                int n = fields.size();
+                                std::string feed("");
+                                int j = 0;
+                                fields[n - 1] = prefix + fields[n - 1];
+                                while ( j < n ){
+                                        feed = feed + fields[j] + ((j == n - 1) ? "" : " ");
+                                        j++;
+                                }
+                                replacements[str] = feed;
+                        }
+			 else if(fields[0].compare(into) == 0 ){
                                 std::string app( "INTO " + prefix + fields[1]);
                                 replacements[str] = app;
-                        } else if(fields[0].compare(update) == 0 && !flag){
+                        } else if(fields[0].compare(update) == 0 ){
                                 std::string app( "UPDATE " + prefix + fields[1]);
                                 replacements[str] = app;
                         }
 			start = what[0].second;
-			flag = 0;
+
 		}
 		start = st.begin();
 		end = st.end();
