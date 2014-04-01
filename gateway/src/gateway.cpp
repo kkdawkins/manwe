@@ -662,6 +662,10 @@ void* HandleConn(void* thread_data) {
             #endif
 
             // Modify packet (if needed)
+            // TODO: Kevin - Check if packet ident matches an 'interesting packet'
+            if(false){
+                // TODO Mathias - Write code here for query filtering
+            }
             if (packet->opcode == CQL_OPCODE_AUTHENTICATE) { // Print body of AUTHENTICATE packet
                 #if DEBUG
                 printf("%u:   Handling AUTHENTICATE packet from Cassandra.\n", (uint32_t)tid);
