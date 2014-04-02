@@ -63,6 +63,12 @@ typedef struct {
 #define CQL_COMPRESSION_LZ4    0x01
 #define CQL_COMPRESSION_SNAPPY 0x02
 
+#define CQL_RESULT_VOID          0x0001
+#define CQL_RESULT_ROWS          0x0002
+#define CQL_RESULT_SET_KEYSPACE  0x0003
+#define CQL_RESULT_PREPARED      0x0004
+#define CQL_RESULT_SCHEMA_CHANGE 0x0005
+
 #define CQL_OPCODE_ERROR          0x00
 #define CQL_OPCODE_STARTUP        0x01
 #define CQL_OPCODE_READY          0x02

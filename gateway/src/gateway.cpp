@@ -662,10 +662,6 @@ void* HandleConn(void* thread_data) {
             #endif
 
             // Modify packet (if needed)
-            // TODO: Kevin - Check if packet ident matches an 'interesting packet'
-            if(false){
-                // TODO Mathias - Write code here for query filtering
-            }
             if (packet->opcode == CQL_OPCODE_AUTHENTICATE) { // Print body of AUTHENTICATE packet
                 #if DEBUG
                 printf("%u:   Handling AUTHENTICATE packet from Cassandra.\n", (uint32_t)tid);
@@ -682,6 +678,159 @@ void* HandleConn(void* thread_data) {
 
                 printf("%u:   Finished with AUTHENTICATE, passing to client.\n", (uint32_t)tid);
                 #endif
+            }
+            else if (packet->opcode == CQL_OPCODE_RESULT) { // Process the result of a query and possibly filter if needed
+
+                if (false) { // TODO - Kevin's check for interesting packet: users, system keyspaces, etc
+
+                }
+                else { // Do a generic filtering of the internal keyspace from returned results
+                    #if DEBUG
+                    printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
+                    #endif
+
+                    int32_t result_type = 0;
+                    memcpy(&result_type, (char *)packet + header_len, 4); // Get the result type
+                    result_type = ntohl(result_type);
+
+                    if (result_type == CQL_RESULT_VOID) {
+                        #if DEBUG
+                        printf("%u:     It is a VOID result.\n", (uint32_t)tid);
+                        #endif
+
+                        // Nothing to do
+                    }
+                    else if (result_type == CQL_RESULT_ROWS) {
+                        #if DEBUG
+                        printf("%u:     It is a ROWS result.\n", (uint32_t)tid);
+                        #endif
+
+                        // TODO
+                    }
+                    else if (result_type == CQL_RESULT_SET_KEYSPACE) {
+                        #if DEBUG
+                        printf("%u:     It is a SET_KEYSPACE result.\n", (uint32_t)tid);
+                        #endif
+
+                        uint16_t str_len = 0;
+                        memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                        str_len = ntohs(str_len);
+
+                        char *str = (char *)malloc(str_len + 1);
+                        memset(str, 0, str_len + 1);
+                        memcpy(str, (char *)packet + header_len + 6, str_len);
+
+                        #if DEBUG
+                        printf("%u:       Before: '%s'.\n", (uint32_t)tid, str);
+                        #endif
+
+                        if (strncmp(token, str, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
+                            char *new_str = (char *)malloc(strlen(str) - TOKEN_LENGTH + 1);
+                            memset(new_str, 0, strlen(str) - TOKEN_LENGTH + 1);
+                            memcpy(new_str, str + TOKEN_LENGTH, strlen(str) - TOKEN_LENGTH);
+                            free(str);
+                            str = new_str;
+                        }
+
+                        str_len = strlen(str);
+                        str_len = htons(str_len);
+                        memcpy((char *)packet + header_len + 4, &str_len, 2);
+                        memcpy((char *)packet + header_len + 6, str, strlen(str));
+
+                        packet->length = 6 + strlen(str);
+                        packet->length = htonl(packet->length);
+
+                        #if DEBUG
+                        printf("%u:       After: '%s'.\n", (uint32_t)tid, str);
+                        #endif
+
+                        free(str);
+                    }
+                    else if (result_type == CQL_RESULT_PREPARED) {
+                        #if DEBUG
+                        printf("%u:     It is a PREPARED result.\n", (uint32_t)tid);
+                        #endif
+
+                        // TODO
+                    }
+                    else if (result_type == CQL_RESULT_SCHEMA_CHANGE) {
+                        #if DEBUG
+                        printf("%u:     It is a SCHEMA_CHANGE result.\n", (uint32_t)tid);
+                        #endif
+
+                        uint16_t str_len = 0;
+                        memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                        str_len = ntohs(str_len);
+
+                        char *change = (char *)malloc(str_len + 1);
+                        memset(change, 0, str_len + 1);
+                        memcpy(change, (char *)packet + header_len + 6, str_len);
+
+                        memcpy(&str_len, (char *)packet + header_len + 6 + strlen(change), 2);
+                        str_len = ntohs(str_len);
+
+                        char *keyspace = (char *)malloc(str_len + 1);
+                        memset(keyspace, 0, str_len + 1);
+                        memcpy(keyspace, (char *)packet + header_len + 8 + strlen(change), str_len);
+
+                        memcpy(&str_len, (char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), 2);
+                        str_len = ntohs(str_len);
+
+                        char *table = (char *)malloc(str_len + 1);
+                        memset(table, 0, str_len + 1);
+                        memcpy(table, (char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), str_len);
+
+                        #if DEBUG
+                        printf("%u:       Before: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                        #endif
+
+                        if (strncmp(token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
+                            char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
+                            memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
+                            memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
+                            free(keyspace);
+                            keyspace = new_keyspace;
+                        }
+                        if (strncmp(token, table, TOKEN_LENGTH) == 0) { // table begins with the internal token
+                            char *new_table = (char *)malloc(strlen(table) - TOKEN_LENGTH + 1);
+                            memset(new_table, 0, strlen(table) - TOKEN_LENGTH + 1);
+                            memcpy(new_table, table + TOKEN_LENGTH, strlen(table) - TOKEN_LENGTH);
+                            free(table);
+                            table = new_table;
+                        }
+
+                        #if DEBUG
+                        printf("%u:       After: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                        #endif
+
+                        // Since we are stripping data from the strings, we don't have to worry about overflowing the packet buffer
+                        str_len = strlen(keyspace);
+                        str_len = htons(str_len);
+                        memcpy((char *)packet + header_len + 6 + strlen(change), &str_len, 2);
+                        memcpy((char *)packet + header_len + 8 + strlen(change), keyspace, strlen(keyspace));
+
+                        str_len = strlen(table);
+                        str_len = htons(str_len);
+                        memcpy((char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), &str_len, 2);
+                        memcpy((char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), table, strlen(table));
+
+                        packet->length = 10 + strlen(change) + strlen(keyspace) + strlen(table);
+                        packet->length = htonl(packet->length);
+
+                        free(change);
+                        free(keyspace);
+                        free(table);
+                    }
+                    else { // Error!
+
+                    }
+
+                    #if DEBUG
+                    printf("%u:   Finished with RESULT, passing to client.\n", (uint32_t)tid);
+                    #endif
+                }
+
+
             }
             else { // All other packets get processed elsewhere
                 // TODO
