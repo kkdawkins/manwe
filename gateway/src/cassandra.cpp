@@ -193,11 +193,11 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
 
                     // Get the internal token
                     (*future.get().result).get_data(0 /* Index */, data);
-                    strncpy(internalToken, reinterpret_cast<char*>(data[0]), TOKEN_LENGTH);
+                    strncpy(internalToken, reinterpret_cast<char*>(&data[0]), TOKEN_LENGTH);
                     
                     // Get the expiration
                     (*future.get().result).get_data(1 /* Index */, data);
-                    expiration = atoi(reinterpret_cast<char*>(data[0]));
+                    expiration = atoi(reinterpret_cast<char*>(&data[0]));
                     
                     // Failure case, such that we carry on given a valid expiration 
                     if(expiration != 0 && expiration <= static_cast<long int>(time(NULL))){
