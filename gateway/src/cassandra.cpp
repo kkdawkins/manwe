@@ -188,19 +188,16 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 if ((*future.get().result).row_count() == 1) {
                     (*future.get().result).next(); // Need to advance to the first row returned
 
-                    cql::cql_byte_t* data = (cql::cql_byte_t*)malloc(sizeof(cql::cql_byte_t));
-                    cql::cql_int_t size = sizeof(cql::cql_byte_t);
+                    std::vector< cql::cql_byte_t > data;
                     int expiration;
 
                     // Get the internal token
-                    (*future.get().result).get_data(0 /* Index */, &data, size);
-                    strncpy(internalToken, reinterpret_cast<char*>(data), TOKEN_LENGTH);
+                    (*future.get().result).get_data(0 /* Index */, data);
+                    strncpy(internalToken, reinterpret_cast<char*>(data[0]), TOKEN_LENGTH);
                     
                     // Get the expiration
-                    data = (cql::cql_byte_t*)malloc(sizeof(cql::cql_int_t));
-                    size = sizeof(cql::cql_int_t);
-                    (*future.get().result).get_data(1 /* Index */, &data, size);
-                    expiration = atoi(reinterpret_cast<char*>(data));
+                    (*future.get().result).get_data(1 /* Index */, data);
+                    expiration = atoi(reinterpret_cast<char*>(data[0]));
                     
                     // Failure case, such that we carry on given a valid expiration 
                     if(expiration != 0 && expiration <= static_cast<long int>(time(NULL))){
