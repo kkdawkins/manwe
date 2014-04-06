@@ -156,9 +156,25 @@ class TestCassandraQueries(unittest.TestCase):
 
 
     def test_CREATE_INSERT_TABLE(self):
+	self._session.execute("DROP KEYSPACE test;")
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
-	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);");
+
+	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")
+	self._session.execute("INSERT INTO test.users (user_name, password, gender,session_token,state,birth_year)VALUES ('kchadha','test123','male','12345abc2323','AZ',1990);")
 	self._session.execute("DROP TABLE test.users;")
+
+	self._session.execute("Use test;")
+	self._session.execute("CREATE TABLE users1 (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")	
+	self._session.execute("DROP TABLE users1;")
+
+
+
+
+	self._session.execute("CREATE TABLE test.emp (empID int,deptID int,first_name varchar,last_name varchar,PRIMARY KEY (empID, deptID));")
+	self._session.execute("INSERT INTO test.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")
+	
+	#self._session.execute("DROP TABLE test.users;")
+	self._session.execute("DROP TABLE test.emp;")
 	self._session.execute("DROP KEYSPACE test;")
 
 # Run the tests!
