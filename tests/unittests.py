@@ -151,6 +151,16 @@ class TestCassandraQueries(unittest.TestCase):
         with self.assertRaisesRegexp(InvalidRequest, "code=2200 \[Invalid query\] message=\"unconfigured columnfamily blah\""):
             self._session.execute("select cluster_name from \"blah\";")
 
+
+
+
+
+    def test_CREATE_INSERT_TABLE(self):
+	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);");
+	self._session.execute("DROP TABLE test.users;")
+	self._session.execute("DROP KEYSPACE test;")
+
 # Run the tests!
 suite = unittest.TestLoader().loadTestsFromTestCase(TestCassandraQueries)
 unittest.TextTestRunner(verbosity=2).run(suite)
