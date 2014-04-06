@@ -917,14 +917,18 @@ std::string process_cql_cmd(string st, const string prefix) {
 	int size = my_exps.size();
 	//Find matches and prefix keyspaces
 	for (; i < size ;i++){
-		boost::regex exp(my_exps.at(i));
+		boost::regex exp(my_exps.at(i), boost::regex_constants::icase);
 		while(boost::regex_search(start, end, what, exp, flags))
 		{
 			std::string str(what.str());
 			boost::trim(str);
 			vector <string> fields;
+			std::string holder("");
 			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
-			found = fields[1].find(sys);
+			holder = fields[1];
+			boost::to_lower(holder);
+			boost::to_upper(fields[0]);
+			found = holder.find(sys);
 	                if (found != std::string::npos){
                                 cout << "System table found at pos: " << found << endl;
                                 start = what[0].second;
