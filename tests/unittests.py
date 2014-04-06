@@ -156,7 +156,7 @@ class TestCassandraQueries(unittest.TestCase):
 
 
     def test_CREATE_INSERT_TABLE(self):
-	#self._session.execute("DROP KEYSPACE test;")
+	self._session.execute("DROP KEYSPACE test;")
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
 
 	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")
@@ -220,9 +220,31 @@ class TestCassandraQueries(unittest.TestCase):
 
 
 	self._session.execute("CREATE TABLE test.emp (empID int,deptID int,first_name varchar,last_name varchar,PRIMARY KEY (empID, deptID));")
-	self._session.execute("INSERT INTO test.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")
+	self._session.execute("INSERT \nINTO \ntest.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")
+	self._session.execute("insert \tinto test.emp (empID,deptID,first_name,last_name)values (132,45,'kevin','dawkins');")
+	self._session.execute("InSErT INtO \n\ttest.emp (empID,deptID,last_name)VALUES (136,45,'chipidza');")
 	
+	# Errors for Insertion #
+	with self.assertRaises(SyntaxException):
+	    self._session.execute("INERT INTO test.emp (empID,deptID,first_name,last_name)VALUES (133,45,'karan','chadha');")
+
+	with self.assertRaises(InvalidRequest):
+	    self._session.execute("INSERT INTO test.emp (empD,deptID,first_name,last_name)VALUES (133,45,'karan','chadha');")
+
+	with self.assertRaises(InvalidRequest):
+	    self._session.execute("INSERT INTO test.emp (empD,deptID,first_name,last_name)VALUES (133,45,'karan','chadha');")
+
+	with self.assertRaises(InvalidRequest):
+	    self._session.execute("INSERT INTO test.emp (deptID,first_name,last_name)VALUES (133,45,'karan','chadha');")
+
+	with self.assertRaises(SyntaxException):
+	    self._session.execute("insert test.empp (empD,deptID,first_name,last_name)VALUES (1773,46,'mathias','gibbens');")
+
+	with self.assertRaises(SyntaxException):
+	    self._session.execute("insert test.emp (empD,deptID,first_name,last_name)VALUES (133,45,'karan','chadha');")
 	
+
+
 	self._session.execute("DROP TABLE test.emp;")
 	self._session.execute("DROP KEYSPACE test;")
 
