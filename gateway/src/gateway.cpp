@@ -928,8 +928,10 @@ std::string process_cql_cmd(string st, const string prefix) {
 			holder = fields[1];
 			boost::to_lower(holder);
 			boost::to_upper(fields[0]);
+			std::string colon(";");
 			found = holder.find(sys);
-	                if (found != std::string::npos){
+	                if (found != std::string::npos || 
+(fields.size() == 2 && fields[1].compare(colon) == 0)){
                                 cout << "System table found at pos: " << found << endl;
                                 start = what[0].second;
 				continue;
