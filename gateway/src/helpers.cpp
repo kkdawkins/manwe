@@ -165,3 +165,63 @@ void gracefulExit(int sig) {
 
     exit(0);
 }
+
+
+
+bool addNode(node *head, node *toAdd){
+    node *tmp;
+    if(head == NULL){
+        head = toAdd;
+        return true;
+    }else{
+        tmp = head;
+        while(tmp->next != NULL){
+            tmp = tmp->next;
+        }
+        tmp->next = toAdd;
+        return true;
+    }
+    return false;
+}
+
+bool removeNode(node *head, node *toRemove){
+    node *tmp;
+    node *tmp2;
+    if(head->id == toRemove->id){
+        if(head->next == NULL){
+            free(head);
+            return true;
+        }else{
+            tmp = head->next;
+            free(head);
+            head = tmp;
+            return true;
+        }
+    }else{
+        tmp = head;
+        while(tmp->next != NULL){
+            if(tmp->next->id != toRemove->id){
+                tmp2 = tmp->next->next;
+                free(tmp->next);
+                tmp->next = tmp2; // Works even if tmp->next is the end, it will be null
+                return true;
+            }
+            tmp = tmp->next;
+        }
+        // if we got here, we never found it
+        return false;
+    }
+    return false;
+}
+
+bool findNode(node *head, int8_t stream_id){
+    node *tmp = head;
+    
+    while(tmp != NULL){
+        if(tmp->id == stream_id){
+            removeNode(head, tmp);
+            return true;
+        }
+    }
+    return false;
+}

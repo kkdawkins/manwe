@@ -49,6 +49,12 @@ typedef struct {
   //void    *body; The body will need to be allocated right after the fixed length header
 } cql_packet_t;
 
+
+typedef struct node{
+    int8_t id; // Stream filed from cql_packet
+    node *next;
+} node; 
+
 //Define constants for the different fields in a CQL packet
 #define CQL_V1_REQUEST  0x01
 #define CQL_V1_RESPONSE 0x81
