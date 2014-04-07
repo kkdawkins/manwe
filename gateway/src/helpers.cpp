@@ -222,6 +222,7 @@ bool findNode(node *head, int8_t stream_id){
             removeNode(head, tmp);
             return true;
         }
+        tmp = tmp->next;
     }
     return false;
 }
