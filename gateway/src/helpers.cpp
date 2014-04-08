@@ -168,20 +168,20 @@ void gracefulExit(int sig) {
 
 
 
-bool addNode(node *head, node *toAdd){
+node* addNode(node *head, node *toAdd){
     node *tmp;
     if(head == NULL){
         head = toAdd;
-        return true;
+        return head;
     }else{
         tmp = head;
         while(tmp->next != NULL){
             tmp = tmp->next;
         }
         tmp->next = toAdd;
-        return true;
+        return head;
     }
-    return false;
+    return NULL;
 }
 
 bool removeNode(node *head, node *toRemove){
@@ -218,6 +218,7 @@ bool findNode(node *head, int8_t stream_id){
     node *tmp = head;
     
     while(tmp != NULL){
+        printf("----------- tmp %d stream %d\n", tmp->id, stream_id);
         if(tmp->id == stream_id){
             removeNode(head, tmp);
             return true;

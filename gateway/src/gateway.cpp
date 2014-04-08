@@ -131,7 +131,8 @@ int main(int argc, char *argv[]) {
  */
 void* HandleConn(void* thread_data) {
     int connfd = *(int *)thread_data;
-
+    bool foundInterestingPacket = false;
+    node *head = NULL;
     // Need to free asap
     free(thread_data);
 
@@ -527,6 +528,18 @@ void* HandleConn(void* thread_data) {
                 #if DEBUG
                 printf("%u:     Query after rewrite: %s\n", (uint32_t)tid, new_query);
                 #endif
+                
+                if(interestingPacket(cpp_string)){
+                
+                    #if DEBUG
+                    printf("%u:     Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
+                    #endif
+                    
+                    node *interesting_packet = (node *)malloc(sizeof(node));
+                    interesting_packet->id = packet->stream;
+                    interesting_packet->next = NULL;
+                    head = addNode(head, interesting_packet);
+                }
 
                 query_len = strlen(new_query);
                 query_len = htonl(query_len);
@@ -681,12 +694,20 @@ void* HandleConn(void* thread_data) {
             }
             else if (packet->opcode == CQL_OPCODE_RESULT) { // Process the result of a query and possibly filter if needed
 
-                if (false) { // TODO - Kevin's check for interesting packet: users, system keyspaces, etc
-
+                if (false && findNode(head,packet->stream)) { // TODO False for now, so Mathias can ignore/delete this code to be used later
+                    
+                    #if DEBUG
+                    printf("%u:   Caught an interesting packet with stream ID %d going to user.\n", (uint32_t)tid,packet->stream);
+                    #endif
+                
+                    foundInterestingPacket = true; // TODO - Needs to be set to false after detection of flag.
+                    
+                    (void)foundInterestingPacket; // TODO - only until we use this variable
                 }
                 else { // Do a generic filtering of the internal keyspace from returned results
                     #if DEBUG
                     printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
+                    printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
                     #endif
 
                     int32_t result_type = 0;
@@ -996,4 +1017,9 @@ bool custom_replace(std::string& str, const std::string& from, const std::string
 		return false;
 	str.replace(start_pos, from.length(), to);
 	return true;
+}
+
+bool interestingPacket(std::string st){
+    (void)st;
+    return true;
 }
