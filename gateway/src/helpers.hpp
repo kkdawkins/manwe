@@ -18,4 +18,7 @@ void FreeStringMap(cql_string_map_t *sm);
 
 void gracefulExit(int sig);
 
+bool addNode(node *head, node *toAdd);
+bool findNode(node *head, int8_t stream_id);
+
 #endif
