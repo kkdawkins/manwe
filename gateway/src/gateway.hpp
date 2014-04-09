@@ -53,7 +53,10 @@ typedef struct {
 typedef struct node{
     int8_t id; // Stream filed from cql_packet
     node *next;
-} node; 
+} node;
+
+#define CQL_V1 1
+#define CQL_v2 2
 
 //Define constants for the different fields in a CQL packet
 #define CQL_V1_REQUEST  0x01

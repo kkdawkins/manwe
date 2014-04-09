@@ -178,7 +178,6 @@ void* HandleConn(void* thread_data) {
     uint8_t header_len = sizeof(cql_packet_t);
     uint32_t body_len = 0;
     int compression_type = CQL_COMPRESSION_NONE;
-    int protocol_version_in_use = 0;
     char *token = (char *)malloc(TOKEN_LENGTH + 1);
     memset(token, 0, TOKEN_LENGTH + 1);
     int bytes_avail = 0;
@@ -199,6 +198,8 @@ void* HandleConn(void* thread_data) {
             #if DEBUG
             printf("%u: Processing packet from client.\n", (uint32_t)tid);
             #endif
+
+            int protocol_version_in_use = 0;
 
             // Get packet from client
             packet = (cql_packet_t *)malloc(header_len);
@@ -221,7 +222,7 @@ void* HandleConn(void* thread_data) {
             }
 
             // Set the protocol version to v1
-            protocol_version_in_use = 1;
+            protocol_version_in_use = CQL_V1;
 
             // Now, read in the remaining 7 bytes of the header.
             if (recv(connfd, ((char *)packet) + 1, 7, 0) < 0) { //The remainder of the CQL header
@@ -276,6 +277,11 @@ void* HandleConn(void* thread_data) {
             // If the packet is compressed, decompress the body. Note that we always send uncompressed packets to Cassandra itself, since
             // we're communicating directly on the same host.
             if (packet->flags & CQL_FLAG_COMPRESSION) {
+                #if DEBUG
+                printf("%u:   Compression is not yet implemented -- exiting.\n", (uint32_t)tid);
+                exit(1);
+                #endif
+
                 #if DEBUG
                 printf("%u:   Packet body is compressed, decompressing.\n", (uint32_t)tid);
                 #endif
@@ -391,7 +397,7 @@ void* HandleConn(void* thread_data) {
                 #endif
             }
             else if (packet->opcode == CQL_OPCODE_CREDENTIALS) { // Modify CREDENTIALS packet to get the instance prefix
-                if (protocol_version_in_use != 1) { // CREDENTIALS is only used in v1 of the CQL protocol
+                if (protocol_version_in_use != CQL_V1) { // CREDENTIALS is only used in v1 of the CQL protocol
                     char msg[] = "CREDENTIALS not supported in this version of CQL";
                     SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
 
@@ -441,7 +447,7 @@ void* HandleConn(void* thread_data) {
                         else {
                             char *userToken = (char *)malloc(TOKEN_LENGTH + 1);
                             memset(userToken, 0, TOKEN_LENGTH + 1);
-//FIXME need to switch prefix token with the internal one
+
                             strncpy(userToken, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
                             char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
                             memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
@@ -486,7 +492,7 @@ void* HandleConn(void* thread_data) {
                     sm = sm->next;
                 }
 
-                if (head == NULL) { // Previously seen error in getting compression method
+                if (head == NULL) { // Previously seen error in getting user info
                     break;
                 }
 
@@ -500,6 +506,13 @@ void* HandleConn(void* thread_data) {
 
                 #if DEBUG
                 printf("%u:   Finished with CREDENTIALS, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
+            }
+            else if (packet->opcode == CQL_OPCODE_OPTIONS) { // CQL OPTIONS packet
+                // Nothing to do here
+
+                #if DEBUG
+                printf("%u:   Saw OPTIONS packet.\n", (uint32_t)tid);
                 #endif
             }
             else if (packet->opcode == CQL_OPCODE_QUERY) { // Rewrite CQL queries if needed
@@ -532,7 +545,7 @@ void* HandleConn(void* thread_data) {
                 if(interestingPacket(cpp_string)){
                 
                     #if DEBUG
-                    printf("%u:     Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
+                    printf("%u:       Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
                     #endif
                     
                     node *interesting_packet = (node *)malloc(sizeof(node));
@@ -586,6 +599,18 @@ void* HandleConn(void* thread_data) {
                 printf("%u:     Query after rewrite: %s\n", (uint32_t)tid, new_query);
                 #endif
 
+                if(interestingPacket(cpp_string)){
+                
+                    #if DEBUG
+                    printf("%u:       Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
+                    #endif
+                    
+                    node *interesting_packet = (node *)malloc(sizeof(node));
+                    interesting_packet->id = packet->stream;
+                    interesting_packet->next = NULL;
+                    head = addNode(head, interesting_packet);
+                }
+
                 query_len = strlen(new_query);
                 query_len = htonl(query_len);
 
@@ -605,8 +630,50 @@ void* HandleConn(void* thread_data) {
                 #endif
 
             }
-            else { // All other packets get processed elsewhere
-                // TODO
+            else if (packet->opcode == CQL_OPCODE_EXECUTE) { // Verify that this prepared statement belongs to the tenant submitting it
+
+                #if DEBUG
+                printf("%u:   Handling EXECUTE packet to verify user can call prepared method.\n", (uint32_t)tid);
+                #endif
+
+                uint16_t num_bytes = 0;
+                memcpy(&num_bytes, (char *)packet + header_len, 2);
+                num_bytes = ntohs(num_bytes);
+
+                #if DEBUG
+                assert(num_bytes > 0); // It makes no sense to supply no bytes back for the id, but the spec doesn't outlaw this
+                #endif
+
+                char *prepared_id = (char *)malloc(num_bytes);
+                memcpy(prepared_id, (char *)packet + header_len + 2, num_bytes);
+
+                // FIXME now, check that this prepared id is valid for this tenant
+
+                // After checking the prepared id, we can ignore the rest of the packet, since it's just data being sent to Cassandra
+
+                #if DEBUG
+                printf("%u:   Finished with EXECUTE, passing to Cassandra.\n", (uint32_t)tid);
+                #endif
+
+            }
+            else if (packet->opcode == CQL_OPCODE_REGISTER) { // CQL REGISTER packet
+                // Nothing to do here
+
+                #if DEBUG
+                printf("%u:   Saw REGISTER packet.\n", (uint32_t)tid);
+                #endif
+            }
+            else { // This is an error -- we got an unexpected packet from the client
+                #if DEBUG
+                printf("%u:   Got unexpected packet type %d from client.\n", (uint32_t)tid, packet->opcode);
+                #endif
+
+                char msg[] = "Got unexpected packet";
+                SendCQLError(connfd, (uint32_t)tid, CQL_ERROR_PROTOCOL_ERROR, msg);
+
+                free(packet);
+                close(connfd);
+                break;
             }
 
             // Send packet to Cassandra (body length may have changed, so re-get value from header)
@@ -675,7 +742,21 @@ void* HandleConn(void* thread_data) {
             #endif
 
             // Modify packet (if needed)
-            if (packet->opcode == CQL_OPCODE_AUTHENTICATE) { // Print body of AUTHENTICATE packet
+            if (packet->opcode == CQL_OPCODE_ERROR) { // CQL ERROR packet
+                // Nothing to do here
+
+                #if DEBUG
+                printf("%u:   Saw ERROR packet.\n", (uint32_t)tid);
+                #endif
+            }
+            else if (packet->opcode == CQL_OPCODE_READY) { // CQL READY packet
+                // Nothing to do here
+
+                #if DEBUG
+                printf("%u:   Saw READY packet.\n", (uint32_t)tid);
+                #endif
+            }
+            else if (packet->opcode == CQL_OPCODE_AUTHENTICATE) { // Print body of AUTHENTICATE packet
                 #if DEBUG
                 printf("%u:   Handling AUTHENTICATE packet from Cassandra.\n", (uint32_t)tid);
 
@@ -692,7 +773,17 @@ void* HandleConn(void* thread_data) {
                 printf("%u:   Finished with AUTHENTICATE, passing to client.\n", (uint32_t)tid);
                 #endif
             }
+            else if (packet->opcode == CQL_OPCODE_SUPPORTED) { // CQL SUPPORTED packet
+                // Nothing to do here
+
+                #if DEBUG
+                printf("%u:   Saw SUPPORTED packet.\n", (uint32_t)tid);
+                #endif
+            }
             else if (packet->opcode == CQL_OPCODE_RESULT) { // Process the result of a query and possibly filter if needed
+
+                // FIXME need to consider that the tracing flag may be set. If so, there will be a [uuid] before the rest of the packet body
+
 
                 if (false && findNode(head,packet->stream)) { // TODO False for now, so Mathias can ignore/delete this code to be used later
                     
@@ -972,7 +1063,7 @@ void* HandleConn(void* thread_data) {
                         memcpy(prepared_id, (char *)packet + offset, num_bytes);
                         offset += num_bytes;
 
-                        // TODO now that we have the prepared statement id, store it so future attempts to execute it can be verified to come from the same user
+                        // FIXME now that we have the prepared statement id, store it so future attempts to execute it can be verified to come from the same user
 
                         // Begin by getting the metadata for the prepared statement
                         int32_t flags = 0;
@@ -1157,13 +1248,6 @@ void* HandleConn(void* thread_data) {
                             free(keyspace);
                             keyspace = new_keyspace;
                         }
-                        if (strncmp(token, table, TOKEN_LENGTH) == 0) { // table begins with the internal token
-                            char *new_table = (char *)malloc(strlen(table) - TOKEN_LENGTH + 1);
-                            memset(new_table, 0, strlen(table) - TOKEN_LENGTH + 1);
-                            memcpy(new_table, table + TOKEN_LENGTH, strlen(table) - TOKEN_LENGTH);
-                            free(table);
-                            table = new_table;
-                        }
 
                         #if DEBUG
                         printf("%u:       After: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
@@ -1188,22 +1272,129 @@ void* HandleConn(void* thread_data) {
                         free(table);
                     }
                     else { // Error!
-
+                        #if DEBUG
+                        printf("%u:       Got unexpected result kind %d from Cassandra -- exiting.\n", (uint32_t)tid, result_type);
+                        exit(1);
+                        #endif
                     }
 
                     #if DEBUG
                     printf("%u:   Finished with RESULT, passing to client.\n", (uint32_t)tid);
                     #endif
                 }
-
-
             }
-            else { // All other packets get processed elsewhere
-                // TODO
+            else if (packet->opcode == CQL_OPCODE_EVENT) { // Process EVENT packet and possibly forward to client
+                #if DEBUG
+                printf("%u:   Handling EVENT packet from Cassandra.\n", (uint32_t)tid);
+                #endif
+
+                uint16_t str_len = 0;
+                memcpy(&str_len, (char *)packet + header_len, 2);
+                str_len = ntohs(str_len);
+
+                char *event_type = (char *)malloc(str_len + 1);
+                memset(event_type, 0, str_len + 1);
+                strncpy(event_type, (char *)packet + header_len + 2, str_len);
+
+                // We only want a client to know about schema changes that affect their instance. If this is for another tenant, don't send packet to client
+                if (strncmp(event_type, "SCHEMA_CHANGE", 13) == 0) {
+                    int offset = header_len + 2 + str_len;
+
+                    memcpy(&str_len, (char *)packet + offset, 2);
+                    str_len = ntohs(str_len);
+                    offset += 2;
+
+                    char *change = (char *)malloc(str_len + 1);
+                    memset(change, 0, str_len + 1);
+                    memcpy(change, (char *)packet + offset, str_len);
+                    offset += str_len;
+
+                    memcpy(&str_len, (char *)packet + offset, 2);
+                    str_len = ntohs(str_len);
+                    offset += 2;
+
+                    char *keyspace = (char *)malloc(str_len + 1);
+                    memset(keyspace, 0, str_len + 1);
+                    memcpy(keyspace, (char *)packet + offset, str_len);
+                    offset += str_len;
+
+                    memcpy(&str_len, (char *)packet + offset, 2);
+                    str_len = ntohs(str_len);
+                    offset += 2;
+
+                    char *table = (char *)malloc(str_len + 1);
+                    memset(table, 0, str_len + 1);
+                    memcpy(table, (char *)packet + offset, str_len);
+
+                    #if DEBUG
+                    printf("%u:     Before: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                    #endif
+
+                    if (strncmp(token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token, so strip and forward packet to client
+                        char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
+                        memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
+                        memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
+                        free(keyspace);
+                        keyspace = new_keyspace;
+                    }
+                    else { // keyspace is not tenant's -- drop packet
+                        #if DEBUG
+                        printf("%u:     This schema change is not for this client -- dropping packet.\n", (uint32_t)tid);
+                        #endif
+
+                        free(change);
+                        free(keyspace);
+                        free(table);
+                        free(event_type);
+
+                        free(packet);
+
+                        continue;
+                    }
+
+                    #if DEBUG
+                    printf("%u:     After: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                    #endif
+
+                    // Since we are stripping data from the strings, we don't have to worry about overflowing the packet buffer
+                    str_len = strlen(keyspace);
+                    str_len = htons(str_len);
+                    memcpy((char *)packet + header_len + 4 + strlen(event_type) + strlen(change), &str_len, 2);
+                    memcpy((char *)packet + header_len + 6 + strlen(event_type) + strlen(change), keyspace, strlen(keyspace));
+
+                    str_len = strlen(table);
+                    str_len = htons(str_len);
+                    memcpy((char *)packet + header_len + 6 + strlen(event_type) + strlen(change) + strlen(keyspace), &str_len, 2);
+                    memcpy((char *)packet + header_len + 8 + strlen(event_type) + strlen(change) + strlen(keyspace), table, strlen(table));
+
+                    packet->length = 8 + strlen(event_type) + strlen(change) + strlen(keyspace) + strlen(table);
+                    packet->length = htonl(packet->length);
+
+                    free(change);
+                    free(keyspace);
+                    free(table);
+                }
+
+                free(event_type);
+
+                #if DEBUG
+                printf("%u:   Finished with EVENT, passing to client.\n", (uint32_t)tid);
+                #endif
+            }
+            else { // This is an error -- we got an unexpected packet from Cassandra
+                #if DEBUG
+                printf("%u:   Got unexpected packet type %d from Cassandra -- exiting.\n", (uint32_t)tid, packet->opcode);
+                exit(1);
+                #endif
             }
 
             // If compression was negotiated with the client, compress the body before sending it back
             if (compression_type != CQL_COMPRESSION_NONE) {
+                #if DEBUG
+                printf("%u:   Compression is not yet implemented -- exiting.\n", (uint32_t)tid);
+                exit(1);
+                #endif
+
                 #if DEBUG
                 printf("%u:   Need to compress packet before sending back to client.\n", (uint32_t)tid);
                 #endif
