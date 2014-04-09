@@ -1020,6 +1020,13 @@ bool custom_replace(std::string& str, const std::string& from, const std::string
 }
 
 bool interestingPacket(std::string st){
-    (void)st;
-    return true;
+    std::string sys("system");
+    std::size_t found = st.find(sys);
+    if (found == std::string::npos){
+        // The system was not found in the query
+        return false;
+    }else if(st.at(found-1) == ' '){ // this is to prevent similar keyspaces (eg mysystem) from being caught)
+        return true;
+    }else
+        return true;
 }
