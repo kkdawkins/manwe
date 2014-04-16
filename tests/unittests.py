@@ -152,11 +152,81 @@ class TestCassandraQueries(unittest.TestCase):
             self._session.execute("select cluster_name from \"blah\";")
 
 
+    def test_ALTER_KEYSPACE_TABLE(self):
+	## You cannot change the name of the keyspace ##
+	#self._session.execute("DROP KEYSPACE test;")
+	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+	self._session.execute("ALTER KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 3};")
 
+	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY, bio ascii);")
+	
+	## Changing the type of a column ##
+	self._session.execute("ALTER TABLE test.users ALTER bio TYPE text;")
+	with self.assertRaises(InvalidRequest): ## Column password was not found in table users ##
+	    self._session.execute("ALTER TABLE test.users ALTER password TYPE blob;")
+
+
+	## Adding a column ##
+	self._session.execute("ALTER TABLE test.users ADD address varchar;")
+	self._session.execute("ALTER TABLE test.users ADD places list<text>;")
+
+	with self.assertRaises(InvalidRequest):
+	    self._session.execute("ALTER TABLE test.users ADD address varchar;")
+
+	## Dropping a column ##
+	self._session.execute("ALTER TABLE test.users DROP places;")
+
+	## Modifying table porperties ##
+	self._session.execute("ALTER TABLE test.users WITH comment = 'A most excellent and useful table' AND read_repair_chance = 0.2;")
+
+	## Modifying the compression or compaction setting ##
+	self._session.execute("ALTER TABLE test.users WITH compression = { 'sstable_compression' : 'DeflateCompressor', 'chunk_length_kb' : 64 };")
+	self._session.execute("ALTER TABLE test.users WITH compaction = { 'class' : 'SizeTieredCompactionStrategy', 'min_threshold' : 6 };")
+
+ 	self._session.execute("DROP TABLE test.users;")
+	self._session.execute("DROP KEYSPACE test;")
+	
+	
+    def test_AAAUPDATE(self):
+	self._session.execute("DROP KEYSPACE test;")
+        self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+        self._session.execute("CREATE TABLE test.emp (empID int,deptID int,first_name varchar,last_name varchar,PRIMARY KEY (empID, deptID));")
+	self._session.execute("INSERT \nINTO \ntest.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")
+	self._session.execute("insert \tinto test.emp (empID,deptID,first_name,last_name)values (132,45,'kevin','dawkins');")
+	with self.assertRaises(InvalidRequest):## Missing mandatory PRIMARY KEY part deptid ##
+	    self._session.execute("UPDATE test.emp SET last_name = 'singh' WHERE empID = 123;")
+	
+	self._session.execute("UPDATE test.emp SET last_name = 'singh' WHERE empID = 123 AND deptID = 45;")
+
+	## Update a column in several rows at once: ##
+	self._session.execute("UPDATE test.emp SET last_name = 'singh' WHERE empID IN (123,132) AND deptID = 45;")
+	## Update several columns in a single row: ##
+	self._session.execute("UPDATE test.emp SET last_name = 'singh', first_name = 'raj' WHERE empID IN (123,132) AND deptID = 45;")
+	self._session.execute("UPDATE test.emp SET last_name = 'singh', first_name = 'raj' WHERE empID = 123 AND deptID = 45;")
+
+	## Update using a collection set ##
+	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY, bio ascii);")
+	self._session.execute("ALTER TABLE test.users ADD places set<text>;")
+	self._session.execute("INSERT INTO test.users (user_name, bio, places)VALUES ('kchadha','test',{'Delhi','Meerut'});")
+	self._session.execute("UPDATE test.users SET places = places + {'Tucson'} WHERE user_name = 'kchadha';")
+
+	## Update using a collection list ##
+	self._session.execute("ALTER TABLE test.users ADD visit_places list<text>;")
+	self._session.execute("UPDATE test.users SET visit_places = visit_places + ['Paris','NewYork','Spain'] WHERE user_name = 'kchadha';")
+	
+	## Update using a collection map ##
+	self._session.execute("ALTER TABLE test.users ADD visit_places_withwhom map<text,text>;")
+	self._session.execute("UPDATE test.users SET visit_places_withwhom = {'Paris':'Kevin','NewYork':'Wallace','Spain':'Mathias'} WHERE user_name = 'kchadha';")
+	
+	
+
+	self._session.execute("DROP TABLE test.emp;")
+	self._session.execute("DROP TABLE test.users;")
+	self._session.execute("DROP KEYSPACE test;")
 
 
     def test_CREATE_INSERT_TABLE(self):
-	self._session.execute("DROP KEYSPACE test;")
+	#self._session.execute("DROP KEYSPACE test;")
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
 
 	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")
