@@ -1450,6 +1450,7 @@ std::string process_cql_cmd(string st, const string prefix) {
 	std::string into("INTO");
 	std::string update("UPDATE");
 	std::string schema("SCHEMA");
+	std::string table("TABLE");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -1465,6 +1466,7 @@ std::string process_cql_cmd(string st, const string prefix) {
 	my_exps.push_back(std::string("USE (.*?);"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
+	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
 	string::const_iterator start, end;
 	start = st.begin();
 	end = st.end();
@@ -1497,7 +1499,10 @@ std::string process_cql_cmd(string st, const string prefix) {
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;			
-			} else if (fields[0].compare(from) == 0 ){
+			} else if(fields[0].compare(table) == 0){
+                                std::string app( "TABLE " + prefix + fields[1]);
+                                replacements[str] = app;
+                        } else if (fields[0].compare(from) == 0 ){
 				std::string app( "FROM " + prefix + fields[1]);
 				replacements[str] = app;
 			} else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
@@ -1510,12 +1515,7 @@ std::string process_cql_cmd(string st, const string prefix) {
 					j++;
 				}
 				replacements[str] = feed;  
-			} /*else if (fields[0].compare(schema) == 0 && !flag){
-				int n = fields.size();
-                                std::string app( "SCHEMA " + prefix + fields[n - 1]);
-                                replacements[str] = app;
-                        }*/
-			  else if(fields[0].compare(into) == 0 ) {
+			} else if(fields[0].compare(into) == 0 ) {
                                 std::string app( "INTO " + prefix + fields[1]);
                                 replacements[str] = app;
                         } else if(fields[0].compare(update) == 0 ){
@@ -1529,18 +1529,11 @@ std::string process_cql_cmd(string st, const string prefix) {
 		end = st.end();
 	}
 	//perform replacements on supplied query
-	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){
-		//cout << traverser->first << ": " << traverser->second <<endl;
-		//found = traverser->second.find(sys);
-		 //if (found != std::string::npos){
-                   //             cout << "System table found at pos: " << found << endl;
-                     //   	continue;
-		//	}		
-
+	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){	
 		found = traverser->second.find('.');
                         if (found!=std::string::npos){
                                 cout << "Dot found" << endl;
-                                custom_replace(traverser->second, dot, dot+prefix);
+                               // custom_replace(traverser->second, dot, dot+prefix);
                         } 
 		custom_replace(st, traverser->first, traverser->second);
 	}
