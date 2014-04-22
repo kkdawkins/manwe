@@ -17,6 +17,7 @@ char* WriteStringMap(cql_string_map_t *sm, uint32_t *new_len);
 void FreeStringMap(cql_string_map_t *sm);
 
 void gracefulExit(int sig);
+void cassandra_thread_cleanup_handler(void *arg);
 
 node* addNode(node *head, node *toAdd);
 bool findNode(node *head, int8_t stream_id);

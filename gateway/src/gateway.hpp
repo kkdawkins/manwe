@@ -36,6 +36,28 @@ extern "C" {
 #define TOKEN_LENGTH 20
 
 //
+// STRUCTS AND CONSTANTS USED BY THEM
+//
+
+typedef struct node {
+    int8_t id; // Stream filed from cql_packet
+    node *next;
+} node;
+
+typedef struct {
+  pthread_mutex_t mutex;    // use a mutex to handle concurrency between the two threads
+
+  int  compression_type;    // what type of packet compression (if any) is being used
+  char *token;              // the internal tenant token
+  node *interestingPackets; // a list of interesting packets
+
+  pthread_t cassandra;      // keep track of the cassandra tread to later cancel/join when client leaves
+
+  int clientfd;             // accepted socket to communicate with the client
+  int cassandrafd;          // socket opened to actual Cassandra
+} cql_thread_t;
+
+//
 // Documentation for the CQL binary protocol is avaiable at <https://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=blob_plain;f=doc/native_protocol_v2.spec;hb=29670eb6692f239a3e9b0db05f2d5a1b5d4eb8b0>
 //
 
@@ -49,11 +71,6 @@ typedef struct {
   //void    *body; The body will need to be allocated right after the fixed length header
 } cql_packet_t;
 
-
-typedef struct node{
-    int8_t id; // Stream filed from cql_packet
-    node *next;
-} node;
 
 #define CQL_V1 1
 #define CQL_v2 2
@@ -115,7 +132,8 @@ typedef struct node{
 #define CQL_ERROR_ALREADY_EXISTS        0x2400
 #define CQL_ERROR_UNPREPARED            0x2500
 
-void* HandleConn(void* thread_data);
+void* HandleConnClient(void* td);
+void* HandleConnCassandra(void* td);
 std::string process_cql_cmd(std::string st, const std::string prefix);
 bool custom_replace(std::string& str, const std::string& from, const std::string& to);
 bool interestingPacket(std::string st);

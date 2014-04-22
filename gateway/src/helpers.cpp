@@ -166,6 +166,11 @@ void gracefulExit(int sig) {
     exit(0);
 }
 
+void cassandra_thread_cleanup_handler(void *arg) {
+    cql_packet_t **packet = (cql_packet_t **)arg;
+    free(*packet);
+}
+
 
 
 node* addNode(node *head, node *toAdd){
