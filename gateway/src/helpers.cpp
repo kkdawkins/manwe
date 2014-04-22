@@ -160,6 +160,133 @@ void FreeStringMap(cql_string_map_t *sm) {
     }
 }
 
+/*
+ * Coverts a CQL results block of memory into a 2D linked list representation.
+ */
+cql_result_cell_t* ReadCQLResults(char *buf, int32_t rows, int32_t cols) {
+    if (buf == NULL || rows == 0) {
+        return NULL;
+    }
+
+    cql_result_cell_t *row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
+    cql_result_cell_t *ret = row;
+
+    uint32_t offset = 0;
+
+    int i,j;
+    int32_t num_bytes = 0;
+
+    for (i = 0; i < rows; i++) {
+        cql_result_cell_t *curr = row;
+
+        for (j = 0; j < cols; j++) {
+            curr->next_col = NULL;
+            curr->next_row = NULL;
+
+            memcpy(&num_bytes, buf + offset, 4);
+            num_bytes = ntohl(num_bytes);
+            offset += 4;
+
+            if (num_bytes > 0) {
+                curr->content = (char *)malloc(num_bytes);
+                memcpy(curr->content, buf + offset, num_bytes);
+                curr->len = num_bytes;
+                offset += num_bytes;
+            }
+            else {
+                curr->content = NULL;
+                curr->len = 0;
+            }
+
+            if (j + 1 < cols) {
+                curr->next_col = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
+                curr = curr->next_col;
+            }
+        }
+
+        if (i + 1 < rows) {
+            row->next_row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
+            row = row->next_row;
+        }
+    }
+
+    return ret;
+}
+
+/*
+ * Coverts a 2D linked list representation of results into a chunk of memory. Returns size of new buffer.
+ */
+char* WriteCQLResults(cql_result_cell_t *rows, uint32_t *new_len, int32_t *new_rows) {
+    if (rows == NULL) {
+        *new_len = 0;
+        *new_rows = 0;
+        return NULL;
+    }
+
+    uint32_t offset = 0;
+
+    // First, count the number of bytes total we will need to allocate
+    *new_len = 0;
+    *new_rows = 0;
+    cql_result_cell_t *row_head = rows;
+    while (row_head != NULL) {
+        *new_rows = *new_rows + 1; // can't use ++, since that triggers -Werror=unused-value
+        cql_result_cell_t *curr = row_head;
+        cql_result_cell_t *next_row = curr->next_row;
+
+        while (curr != NULL) {
+            *new_len += 4 + curr->len;
+
+            curr = curr->next_col;
+        }
+
+        row_head = next_row;
+    }
+
+    // Make the chunk of memory
+    char *ret = (char *)malloc(*new_len);
+
+    // Set values in memory
+    row_head = rows;
+    while (row_head != NULL) {
+        cql_result_cell_t *curr = row_head;
+        cql_result_cell_t *next_row = curr->next_row;
+
+        while (curr != NULL) {
+
+            int32_t len = htonl(curr->len);
+
+            memcpy(ret + offset, &len, 4);
+            memcpy(ret + offset + 4, curr->content, curr->len);
+
+            offset += 4 + curr->len;
+
+            curr = curr->next_col;
+        }
+
+        row_head = next_row;
+    }
+
+    return ret;
+}
+
+void FreeCQLResults(cql_result_cell_t *rows) {
+    while (rows != NULL) {
+        cql_result_cell_t *curr_cell = rows;
+        cql_result_cell_t *next_row = curr_cell->next_row;
+
+        while (curr_cell != NULL) {
+            cql_result_cell_t *next_cell = curr_cell->next_col;
+            free(curr_cell->content);
+            free(curr_cell);
+            curr_cell = next_cell;
+        }
+
+        rows = next_row;
+    }
+}
+
+
 void gracefulExit(int sig) {
     fprintf(stderr, "\nCaught sig %d -- exiting.\n", sig);
 

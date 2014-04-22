@@ -17,6 +17,8 @@ extern "C" {
 #endif
 }
 
+#include "helpers.hpp"
+
 //
 // CONSTANT DEFINE SECTION
 //
@@ -38,11 +40,6 @@ extern "C" {
 //
 // STRUCTS AND CONSTANTS USED BY THEM
 //
-
-typedef struct node {
-    int8_t id; // Stream filed from cql_packet
-    node *next;
-} node;
 
 typedef struct {
   pthread_mutex_t mutex;    // use a mutex to handle concurrency between the two threads
