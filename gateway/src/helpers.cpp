@@ -287,6 +287,186 @@ void FreeCQLResults(cql_result_cell_t *rows) {
 }
 
 
+/*
+ * Reads and parses the metadata of a result packet.
+ */
+cql_result_metadata_t * ReadResultMetadata(char *buf, uint32_t tid) {
+    if (buf == NULL) {
+        return NULL;
+    }
+
+    cql_result_metadata_t *m = (cql_result_metadata_t *)malloc(sizeof(cql_result_metadata_t));
+    m->offset = 0;
+
+    memcpy(&m->flags, buf, 4);
+    m->flags = ntohl(m->flags);
+    m->offset += 4;
+
+    memcpy(&m->columns_count, buf + m->offset, 4);
+    m->columns_count = ntohl(m->columns_count);
+    m->offset += 4;
+
+    uint16_t str_len = 0;
+
+    if (m->flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC) { // Get keyspace and table from global spec
+        // Get the keyspace
+        memcpy(&str_len, buf + m->offset, 2);
+        str_len = ntohs(str_len);
+        m->offset += 2;
+
+        m->keyspace = (char *)malloc(str_len + 1);
+        memset(m->keyspace, 0, str_len + 1);
+        memcpy(m->keyspace, buf + m->offset, str_len);
+        m->offset += str_len;
+
+        // Get the table
+        memcpy(&str_len, buf + m->offset, 2);
+        str_len = ntohs(str_len);
+        m->offset += 2;
+
+        m->table = (char *)malloc(str_len + 1);
+        memset(m->table, 0, str_len + 1);
+        memcpy(m->table, buf + m->offset, str_len);
+        m->offset += str_len;
+
+        #if DEBUG
+        printf("%u:       From the global tables spec, keyspace is '%s', table is '%s'.\n", tid, m->keyspace, m->table);
+        #endif
+    }
+
+    m->column = (cql_column_spec_t *)malloc(sizeof(cql_column_spec_t));
+    cql_column_spec_t *curr = m->column;
+
+    int i;
+    for (i = 0; i < m->columns_count; i++) {
+
+        if (i == 0 && !(m->flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC)) { // Get keyspace and table from first column spec
+            // Get the keyspace
+            memcpy(&str_len, buf + m->offset, 2);
+            str_len = ntohs(str_len);
+            m->offset += 2;
+
+            m->keyspace = (char *)malloc(str_len + 1);
+            memset(m->keyspace, 0, str_len + 1);
+            memcpy(m->keyspace, buf + m->offset, str_len);
+            m->offset += str_len;
+
+            // Get the table
+            memcpy(&str_len, buf + m->offset, 2);
+            str_len = ntohs(str_len);
+            m->offset += 2;
+
+            m->table = (char *)malloc(str_len + 1);
+            memset(m->table, 0, str_len + 1);
+            memcpy(m->table, buf + m->offset, str_len);
+            m->offset += str_len;
+
+            #if DEBUG
+            printf("%u:       From the first column, keyspace is '%s', table is '%s'.\n", tid, m->keyspace, m->table);
+            #endif
+        }
+
+        // Get the column name
+        memcpy(&str_len, buf + m->offset, 2);
+        str_len = ntohs(str_len);
+        m->offset += 2;
+
+        curr->name = (char *)malloc(str_len + 1);
+        memset(curr->name, 0, str_len + 1);
+        memcpy(curr->name, buf + m->offset, str_len);
+        m->offset += str_len;
+
+        memcpy(&curr->type, buf + m->offset, 2);
+        curr->type = ntohs(curr->type);
+        m->offset += 2;
+
+        #if DEBUG
+        printf("%u:       Column name and type: '%s' %d.\n", tid, curr->name, curr->type);
+        #endif
+
+        // Currently, we don't really care about what type each column is, but we need to advance the offset
+        if (curr->type == 0x0000) { // Custom type
+            memcpy(&str_len, buf + m->offset, 2);
+            str_len = ntohs(str_len);
+            m->offset += 2 + str_len;
+        }
+        // FIXME currently assumes no more than a 2D list/map/set
+        else if (curr->type == 0x0020) { // List type
+            uint16_t list_type_id = 0;
+            memcpy(&list_type_id, buf + m->offset, 2);
+            list_type_id = ntohs(list_type_id);
+            m->offset += 2;
+
+            if (list_type_id == 0x0000) {
+                memcpy(&str_len, buf + m->offset, 2);
+                str_len = ntohs(str_len);
+                m->offset += 2 + str_len;
+            }
+        }
+        else if (curr->type == 0x0021) { // Map type
+            // The key
+            uint16_t map_type_id = 0;
+            memcpy(&map_type_id, buf + m->offset, 2);
+            map_type_id = ntohs(map_type_id);
+            m->offset += 2;
+
+            if (map_type_id == 0x0000) {
+                memcpy(&str_len, buf + m->offset, 2);
+                str_len = ntohs(str_len);
+                m->offset += 2 + str_len;
+            }
+
+            // The value
+            memcpy(&map_type_id, buf + m->offset, 2);
+            map_type_id = ntohs(map_type_id);
+            m->offset += 2;
+
+            if (map_type_id == 0x0000) {
+                memcpy(&str_len, buf + m->offset, 2);
+                str_len = ntohs(str_len);
+                m->offset += 2 + str_len;
+            }
+        }
+        else if (curr->type == 0x0022) { // Set type
+            uint16_t set_type_id = 0;
+            memcpy(&set_type_id, buf + m->offset, 2);
+            set_type_id = ntohs(set_type_id);
+            m->offset += 2;
+
+            if (set_type_id == 0x0000) {
+                memcpy(&str_len, buf + m->offset, 2);
+                str_len = ntohs(str_len);
+                m->offset += 2 + str_len;
+            }
+        }
+
+        if (i + 1 < m->columns_count) {
+            curr->next = (cql_column_spec_t *)malloc(sizeof(cql_column_spec_t));
+            curr = curr->next;
+        }
+        else {
+            curr->next = NULL;
+        }
+    }
+
+    return m;
+}
+
+void FreeResultMetadata(cql_result_metadata_t *m) {
+    if (m != NULL) {
+        free(m->keyspace);
+        free(m->table);
+        cql_column_spec_t *c = m->column;
+        while (c != NULL) {
+            cql_column_spec_t *n = c->next;
+            free(c->name);
+            free(c);
+            c = n;
+        }
+        free(m);
+    }
+}
+
 void gracefulExit(int sig) {
     fprintf(stderr, "\nCaught sig %d -- exiting.\n", sig);
 
