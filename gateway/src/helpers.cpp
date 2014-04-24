@@ -295,6 +295,10 @@ cql_result_metadata_t * ReadResultMetadata(char *buf, uint32_t tid) {
         return NULL;
     }
 
+    #ifndef DEBUG
+    (void)tid; // Need to reference variable if not debugging to prevent error
+    #endif
+
     cql_result_metadata_t *m = (cql_result_metadata_t *)malloc(sizeof(cql_result_metadata_t));
     m->offset = 0;
 

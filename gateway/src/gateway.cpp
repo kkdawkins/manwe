@@ -396,7 +396,9 @@ void* HandleConnClient(void* td) {
             }
 
             while (sm != NULL) {
+                #if DEBUG
                 printf("%u:     %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
+                #endif
 
                 if (strcmp(sm->key, "username") == 0) {
                     if (strlen(sm->value) <= TOKEN_LENGTH) { // The supplied username must be at least TOKEN_LENGTH + 1 characters long, so we can properly grab the token and still have at least one character remaining to pass on to Cassandra.
@@ -415,30 +417,26 @@ void* HandleConnClient(void* td) {
                     else {
                         char *userToken = (char *)malloc(TOKEN_LENGTH + 1);
                         memset(userToken, 0, TOKEN_LENGTH + 1);
-
                         strncpy(userToken, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
-                        char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
-                        memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
-                        strncpy(username, sm->value + TOKEN_LENGTH, strlen(sm->value) - TOKEN_LENGTH);
-                        strncpy(sm->value, username, strlen(username)); // Move the actual username to the front
-                        memset(sm->value + strlen(username), 0, 1); // NULL terminate the string
-                        free(username);
 
                         #if DEBUG
                         printf("%u:       Token: %s\n", (uint32_t)tid, userToken);
-                        printf("%u:       Username: %s\n", (uint32_t)tid, sm->value);
                         #endif
 
                         // Now, validate that the supplied token is valid
                         pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
-                        if (checkToken(userToken, thread_data->token, false)) { // User token is valid
+                        bool isValid = checkToken(userToken, thread_data->token, false); // The checkToken function sets the contents of 'thread_data->token' before returning
+                        pthread_mutex_unlock(&thread_data->mutex); // Release mutex
+
+                        free(userToken);
+
+                        if (isValid) { // User token is valid
                             #if DEBUG
                             printf("%u:       Internal Token: %s\n", (uint32_t)tid, thread_data->token);
                             #endif
 
-                            // Nothing else to do, as the checkToken function sets the contents of 'token' before returning.
-
-                            free(userToken);
+                            // Replace the user-supplied token with the internal one for prefixing the username
+                            memcpy(sm->value, thread_data->token, TOKEN_LENGTH); // Safe to copy without mutex
                         }
                         else { // User token is invalid
                             #if DEBUG
@@ -448,15 +446,15 @@ void* HandleConnClient(void* td) {
                             char msg[] = "Token supplied is not valid";
                             SendCQLError(thread_data->clientfd, (uint32_t)tid, CQL_ERROR_BAD_CREDENTIALS, msg);
 
-                            free(userToken);
                             FreeStringMap(head);
                             head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
 
-                            pthread_mutex_unlock(&thread_data->mutex); // Release mutex before breaking out
-
                             break;
                         }
-                        pthread_mutex_unlock(&thread_data->mutex); // Release mutex
+
+                        #if DEBUG
+                        printf("%u:       Internal username: %s\n", (uint32_t)tid, sm->value);
+                        #endif
                     }
                 }
 
@@ -469,9 +467,8 @@ void* HandleConnClient(void* td) {
 
             uint32_t new_len = 0;
             char *new_body = WriteStringMap(head, &new_len);
-            memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length will decrease by TOKEN_LENGTH bytes, so memory allocation will be fine.
+            memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length will not change, so memory allocation will be fine.
             free(new_body);
-            packet->length = htonl(new_len);
 
             FreeStringMap(head);
 
@@ -1248,7 +1245,9 @@ std::string process_cql_cmd(string st, const string prefix) {
 			found = holder.find(sys);
 	                if (found != std::string::npos || 
 (fields.size() == 2 && fields[1].compare(colon) == 0)){
+                                #if DEBUG
                                 cout << "System table found at pos: " << found << endl;
+                                #endif
                                 start = what[0].second;
 				continue;
                         }
