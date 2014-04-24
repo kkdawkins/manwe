@@ -131,7 +131,7 @@ typedef struct {
 
 void* HandleConnClient(void* td);
 void* HandleConnCassandra(void* td);
-std::string process_cql_cmd(std::string st, const std::string prefix);
+std::string process_cql_cmd(std::string st, std::string prefix);
 bool custom_replace(std::string& str, const std::string& from, const std::string& to);
 bool interestingPacket(std::string st);
 #endif

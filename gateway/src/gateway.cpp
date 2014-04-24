@@ -1199,7 +1199,7 @@ void* HandleConnCassandra(void* td) {
 }
 
 using namespace std;
-std::string process_cql_cmd(string st, const string prefix) {
+std::string process_cql_cmd(string st, string prefix) {
 	std::string use("USE");
 	std::string from("FROM");
 	std::string keyspace("KEYSPACE");
@@ -1239,7 +1239,7 @@ std::string process_cql_cmd(string st, const string prefix) {
 			boost::trim(str);
 			vector <string> fields;
 			std::string holder("");
-			boost::split_regex( fields, str, boost::regex( "[ ]{1,}" ) );
+			boost::split_regex( fields, str, boost::regex( "[\\s]{1,}" ) );
 			holder = fields[1];
 			boost::to_lower(holder);
 			boost::to_upper(fields[0]);
@@ -1253,7 +1253,11 @@ std::string process_cql_cmd(string st, const string prefix) {
                                 start = what[0].second;
 				continue;
                         }
-
+			int bx = fields.size();
+			std::string quote("\"");
+			if ( custom_replace(fields[bx - 1], std::string("\""), std::string(""))){
+				prefix = quote + prefix; 
+			}
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;			
