@@ -71,6 +71,37 @@ class TestCassandraQueries(unittest.TestCase):
 
         # FIXME todo
 
+    def test_tenant_users(self):
+        ########## Test that the only users we see are ours ##########
+
+        rows = self._session.execute("SELECT * FROM system_auth.users;")
+
+        # There should only be the "virtual" cassandra user by default
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].name, "cassandra")
+        self.assertTrue(rows[0].super)
+
+        rows = self._session.execute("SELECT * FROM system_auth.credentials;")
+
+        # There should only be the "virtual" cassandra user by default
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].username, "cassandra")
+
+        # Now, add a user and make sure it appears properly
+        self._session.execute("CREATE USER 'test' WITH PASSWORD 'test';")
+        rows = self._session.execute("SELECT * FROM system_auth.users;")
+
+        self.assertEqual(len(rows), 2)
+
+        for row in rows:
+            self.assertTrue(row.name in ["cassandra", "test"], "Got unexpected username '%s'" % row.name)
+
+        # Finally, remove test user
+        self._session.execute("DROP USER 'test';")
+        rows = self._session.execute("SELECT * FROM system_auth.users;")
+
+        self.assertEqual(len(rows), 1)
+
     ########## These test all CQL queries ##########
 
     def test_query_CREATE_KEYSPACE(self):
@@ -188,7 +219,6 @@ class TestCassandraQueries(unittest.TestCase):
 	
 	
     def test_AAAUPDATE(self):
-	self._session.execute("DROP KEYSPACE test;")
         self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
         self._session.execute("CREATE TABLE test.emp (empID int,deptID int,first_name varchar,last_name varchar,PRIMARY KEY (empID, deptID));")
 	self._session.execute("INSERT \nINTO \ntest.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")

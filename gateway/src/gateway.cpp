@@ -178,7 +178,6 @@ void* HandleConnClient(void* td) {
     int recv_ret; // Save the return value of the recv() call below, since we may need to take action in case of error
 
     // At the top of the loop, we are expecting the start of another CQL packet. If it doesn't look right, send back an error and close the connection.
-    // FIXME When the client closes the connection, we need to detect it and properly terminate the two threads that were handling it.
     // INVARIANT: Before recv() is called, packet will be allocated with (cql_packet_t *)malloc(header_len).
     while (recv_ret = recv(thread_data->clientfd, packet, 1, 0), recv_ret == 1) { // Read in the first byte of the potential CQL header from the client. A value of 0 indicates clean shutdown, and less than 0 is an error
         #if DEBUG
@@ -397,7 +396,9 @@ void* HandleConnClient(void* td) {
             }
 
             while (sm != NULL) {
+                #if DEBUG
                 printf("%u:     %s -> %s\n", (uint32_t)tid, sm->key, sm->value);
+                #endif
 
                 if (strcmp(sm->key, "username") == 0) {
                     if (strlen(sm->value) <= TOKEN_LENGTH) { // The supplied username must be at least TOKEN_LENGTH + 1 characters long, so we can properly grab the token and still have at least one character remaining to pass on to Cassandra.
@@ -416,30 +417,26 @@ void* HandleConnClient(void* td) {
                     else {
                         char *userToken = (char *)malloc(TOKEN_LENGTH + 1);
                         memset(userToken, 0, TOKEN_LENGTH + 1);
-
                         strncpy(userToken, sm->value, TOKEN_LENGTH); //Copy the token into the variable for user later on
-                        char *username = (char *)malloc(strlen(sm->value) - TOKEN_LENGTH + 1); //Allocate temp storage incase username > TOKEN_LENGTH
-                        memset(username, 0, strlen(sm->value) - TOKEN_LENGTH + 1);
-                        strncpy(username, sm->value + TOKEN_LENGTH, strlen(sm->value) - TOKEN_LENGTH);
-                        strncpy(sm->value, username, strlen(username)); // Move the actual username to the front
-                        memset(sm->value + strlen(username), 0, 1); // NULL terminate the string
-                        free(username);
 
                         #if DEBUG
                         printf("%u:       Token: %s\n", (uint32_t)tid, userToken);
-                        printf("%u:       Username: %s\n", (uint32_t)tid, sm->value);
                         #endif
 
                         // Now, validate that the supplied token is valid
                         pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
-                        if (checkToken(userToken, thread_data->token, false)) { // User token is valid
+                        bool isValid = checkToken(userToken, thread_data->token, false); // The checkToken function sets the contents of 'thread_data->token' before returning
+                        pthread_mutex_unlock(&thread_data->mutex); // Release mutex
+
+                        free(userToken);
+
+                        if (isValid) { // User token is valid
                             #if DEBUG
                             printf("%u:       Internal Token: %s\n", (uint32_t)tid, thread_data->token);
                             #endif
 
-                            // Nothing else to do, as the checkToken function sets the contents of 'token' before returning.
-
-                            free(userToken);
+                            // Replace the user-supplied token with the internal one for prefixing the username
+                            memcpy(sm->value, thread_data->token, TOKEN_LENGTH); // Safe to copy without mutex
                         }
                         else { // User token is invalid
                             #if DEBUG
@@ -449,15 +446,15 @@ void* HandleConnClient(void* td) {
                             char msg[] = "Token supplied is not valid";
                             SendCQLError(thread_data->clientfd, (uint32_t)tid, CQL_ERROR_BAD_CREDENTIALS, msg);
 
-                            free(userToken);
                             FreeStringMap(head);
                             head = NULL; // We need to be sneaky and break out the the main processing loop. c++ doesn't allow labels on loops, so use head == NULL as the conditional for another break below.
 
-                            pthread_mutex_unlock(&thread_data->mutex); // Release mutex before breaking out
-
                             break;
                         }
-                        pthread_mutex_unlock(&thread_data->mutex); // Release mutex
+
+                        #if DEBUG
+                        printf("%u:       Internal username: %s\n", (uint32_t)tid, sm->value);
+                        #endif
                     }
                 }
 
@@ -470,9 +467,8 @@ void* HandleConnClient(void* td) {
 
             uint32_t new_len = 0;
             char *new_body = WriteStringMap(head, &new_len);
-            memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length will decrease by TOKEN_LENGTH bytes, so memory allocation will be fine.
+            memcpy((char *)packet + header_len, new_body, new_len); // We know that the body length will not change, so memory allocation will be fine.
             free(new_body);
-            packet->length = htonl(new_len);
 
             FreeStringMap(head);
 
@@ -825,511 +821,217 @@ void* HandleConnCassandra(void* td) {
 
             // FIXME need to consider that the tracing flag may be set. If so, there will be a [uuid] before the rest of the packet body
 
-
             pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-            bool flag = false && findNode(thread_data->interestingPackets, packet->stream);
+            bool isInterestingPacket = false && findNode(thread_data->interestingPackets, packet->stream);
             pthread_mutex_unlock(&thread_data->mutex); // Release mutex
-            if (flag) { // TODO False for now, so Mathias can ignore/delete this code to be used later
-                    
+
+            if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
                 #if DEBUG
                 printf("%u:   Caught an interesting packet with stream ID %d going to user.\n", (uint32_t)tid,packet->stream);
                 #endif
-                
-                //foundInterestingPacket = true; // TODO - Needs to be set to false after detection of flag.
-                    
-                //(void)foundInterestingPacket; // TODO - only until we use this variable
             }
-            else { // Do a generic filtering of the internal keyspace from returned results
+
+            #if DEBUG
+            printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
+            printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
+            #endif
+
+            int32_t result_type = 0;
+            memcpy(&result_type, (char *)packet + header_len, 4); // Get the result type
+            result_type = ntohl(result_type);
+
+            if (result_type == CQL_RESULT_VOID) {
                 #if DEBUG
-                printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
-                printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
+                printf("%u:     It is a VOID result.\n", (uint32_t)tid);
                 #endif
 
-                int32_t result_type = 0;
-                memcpy(&result_type, (char *)packet + header_len, 4); // Get the result type
-                result_type = ntohl(result_type);
+                // Nothing to do
+            }
+            else if (result_type == CQL_RESULT_ROWS) {
+                #if DEBUG
+                printf("%u:     It is a ROWS result.\n", (uint32_t)tid);
+                #endif
 
-                if (result_type == CQL_RESULT_VOID) {
-                    #if DEBUG
-                    printf("%u:     It is a VOID result.\n", (uint32_t)tid);
-                    #endif
+                uint32_t offset = header_len + 4; // Because there can be a varied number of items before the rows begin, need to keep track of the offset in the packet
 
-                    // Nothing to do
-                }
-                else if (result_type == CQL_RESULT_ROWS) {
-                    #if DEBUG
-                    printf("%u:     It is a ROWS result.\n", (uint32_t)tid);
-                    #endif
+                // Begin by getting the metadata for the rows
+                cql_result_metadata_t *metadata = ReadResultMetadata((char *)packet + offset, (uint32_t)tid);
+                offset += metadata->offset; // Move the offset to the end of the metadata block
 
-                    uint32_t offset = header_len + 4; // Because there can be a varied number of items before the rows begin, need to keep track of the offset in the packet
+                int32_t rows_count = 0;
+                memcpy(&rows_count, (char *)packet + offset, 4);
+                rows_count = ntohl(rows_count);
+                offset += 4;
 
-                    char *keyspace = NULL; // These will hold the name of the keyspace / table involved in the rows returned
-                    char *table = NULL;
+                #if DEBUG
+                printf("%u:       There are %d rows and %d columns.\n", (uint32_t)tid, rows_count, metadata->columns_count);
+                #endif
 
-                    // Begin by getting the metadata for the rows
-                    int32_t flags = 0;
-                    memcpy(&flags, (char *)packet + offset, 4);
-                    flags = ntohl(flags);
-                    offset += 4;
+                // Get the actual result data
+                cql_result_cell_t *parsed_table = ReadCQLResults((char *)packet + offset, rows_count, metadata->columns_count);
 
-                    int32_t columns_count = 0;
-                    memcpy(&columns_count, (char *)packet + offset, 4);
-                    columns_count = ntohl(columns_count);
-                    offset += 4;
+                // TODO - Kevin, filter rows here
 
-                    if (flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC) { // Get keyspace and table from global spec
-                        // Get the keyspace
-                        uint16_t str_len = 0;
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
+                uint32_t buf_len = 0;
+                char *new_rows = WriteCQLResults(parsed_table, &buf_len, &rows_count);
 
-                        keyspace = (char *)malloc(str_len + 1);
-                        memset(keyspace, 0, str_len + 1);
-                        memcpy(keyspace, (char *)packet + offset, str_len);
-                        offset += str_len;
+                #if DEBUG
+                printf("%u:       After filtering, there are now %d rows and %d columns.\n", (uint32_t)tid, rows_count, metadata->columns_count);
+                #endif
 
-                        // Get the table
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
+                // Now, update the packet with the new rows. Since we will only ever remove them, we don't have to worry about overflowing allocated memory.
+                rows_count = htonl(rows_count);
+                memcpy((char *)packet + offset - 4, &rows_count, 4);
+                memcpy((char *)packet + offset, new_rows, buf_len);
+                packet->length = htonl(offset - header_len + buf_len);
 
-                        table = (char *)malloc(str_len + 1);
-                        memset(table, 0, str_len + 1);
-                        memcpy(table, (char *)packet + offset, str_len);
-                        offset += str_len;
+                free(new_rows);
+                FreeCQLResults(parsed_table);
+                FreeResultMetadata(metadata);
+            }
+            else if (result_type == CQL_RESULT_SET_KEYSPACE) {
+                #if DEBUG
+                printf("%u:     It is a SET_KEYSPACE result.\n", (uint32_t)tid);
+                #endif
 
-                        #if DEBUG
-                        printf("%u:       From the global tables spec, keyspace is '%s', table is '%s'.\n", (uint32_t)tid, keyspace, table);
-                        #endif
-                    }
+                uint16_t str_len = 0;
+                memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                str_len = ntohs(str_len);
 
-                    int i,j;
-                    for (i = 0; i < columns_count; i++) {
-                        uint16_t str_len = 0;
+                char *str = (char *)malloc(str_len + 1);
+                memset(str, 0, str_len + 1);
+                memcpy(str, (char *)packet + header_len + 6, str_len);
 
-                        if (i == 0 && !(flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC)) { // Get keyspace and table from first column spec
-                            // Get the keyspace
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2;
+                #if DEBUG
+                printf("%u:       Before: '%s'.\n", (uint32_t)tid, str);
+                #endif
 
-                            keyspace = (char *)malloc(str_len + 1);
-                            memset(keyspace, 0, str_len + 1);
-                            memcpy(keyspace, (char *)packet + offset, str_len);
-                            offset += str_len;
-
-                            // Get the table
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2;
-
-                            table = (char *)malloc(str_len + 1);
-                            memset(table, 0, str_len + 1);
-                            memcpy(table, (char *)packet + offset, str_len);
-                            offset += str_len;
-
-                            #if DEBUG
-                            printf("%u:       From the first column, keyspace is '%s', table is '%s'.\n", (uint32_t)tid, keyspace, table);
-                            #endif
-                        }
-
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
-
-                        char *column_name = (char *)malloc(str_len + 1);
-                        memset(column_name, 0, str_len + 1);
-                        memcpy(column_name, (char *)packet + offset, str_len);
-                        offset += str_len;
-
-                        uint16_t type_id = 0;
-                        memcpy(&type_id, (char *)packet + offset, 2);
-                        type_id = ntohs(type_id);
-                        offset += 2;
-
-                        #if DEBUG
-                        printf("%u:       Column name and type: '%s' %d.\n", (uint32_t)tid, column_name, type_id);
-                        #endif
-
-                        // Currently, we don't really care about what type each column is, but we need to advance the offset
-                        if (type_id == 0x0000) { // Custom type
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2 + str_len;
-                        }
-                        // FIXME currently assumes no more than a 2D list/map/set
-                        else if (type_id == 0x0020) { // List type
-                            uint16_t list_type_id = 0;
-                            memcpy(&list_type_id, (char *)packet + offset, 2);
-                            list_type_id = ntohs(list_type_id);
-                            offset += 2;
-
-                            if (list_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-                        else if (type_id == 0x0021) { // Map type
-                            // The key
-                            uint16_t map_type_id = 0;
-                            memcpy(&map_type_id, (char *)packet + offset, 2);
-                            map_type_id = ntohs(map_type_id);
-                            offset += 2;
-
-                            if (map_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-
-                            // The value
-                            memcpy(&map_type_id, (char *)packet + offset, 2);
-                            map_type_id = ntohs(map_type_id);
-                            offset += 2;
-
-                            if (map_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-                        else if (type_id == 0x0022) { // Set type
-                            uint16_t set_type_id = 0;
-                            memcpy(&set_type_id, (char *)packet + offset, 2);
-                            set_type_id = ntohs(set_type_id);
-                            offset += 2;
-
-                            if (set_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-
-                        free(column_name);
-                    }
-
-                    int32_t rows_count = 0;
-                    memcpy(&rows_count, (char *)packet + offset, 4);
-                    rows_count = ntohl(rows_count);
-                    offset += 4;
-
-                    #if DEBUG
-                    printf("%u:       There are %d rows and %d columns.\n", (uint32_t)tid, rows_count, columns_count);
-                    #endif
-
-                    int32_t bytes_count = 0;
-                    char *bytes_content = NULL; // Yuck -- should really be void*, but c++ doesn't like that
-
-                    for (i = 0; i < rows_count; i++) {
-                        for (j = 0; j < columns_count; j++) {
-                            memcpy(&bytes_count, (char *)packet + offset, 4);
-                            bytes_count = ntohl(bytes_count);
-                            offset += 4;
-
-                            if (bytes_count > 0) {
-                                bytes_content = (char *)malloc(bytes_count);
-                                memcpy(bytes_content, (char *)packet + offset, bytes_count);
-                                offset += bytes_count;
-
-                                // TODO depending on content, we may need to further parse the bytes here
-
-                                free(bytes_content);
-                            }
-                        }
-                    }
-
-                    free(keyspace);
-                    free(table);
-
-                }
-                else if (result_type == CQL_RESULT_SET_KEYSPACE) {
-                    #if DEBUG
-                    printf("%u:     It is a SET_KEYSPACE result.\n", (uint32_t)tid);
-                    #endif
-
-                    uint16_t str_len = 0;
-                    memcpy(&str_len, (char *)packet + header_len + 4, 2);
-                    str_len = ntohs(str_len);
-
-                    char *str = (char *)malloc(str_len + 1);
-                    memset(str, 0, str_len + 1);
-                    memcpy(str, (char *)packet + header_len + 6, str_len);
-
-                    #if DEBUG
-                    printf("%u:       Before: '%s'.\n", (uint32_t)tid, str);
-                    #endif
-
-                    pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
-                    if (strncmp(thread_data->token, str, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
-                        char *new_str = (char *)malloc(strlen(str) - TOKEN_LENGTH + 1);
-                        memset(new_str, 0, strlen(str) - TOKEN_LENGTH + 1);
-                        memcpy(new_str, str + TOKEN_LENGTH, strlen(str) - TOKEN_LENGTH);
-                        free(str);
-                        str = new_str;
-                    }
-                    pthread_mutex_unlock(&thread_data->mutex); // Release mutex
-
-                    str_len = strlen(str);
-                    str_len = htons(str_len);
-                    memcpy((char *)packet + header_len + 4, &str_len, 2);
-                    memcpy((char *)packet + header_len + 6, str, strlen(str));
-
-                    packet->length = 6 + strlen(str);
-                    packet->length = htonl(packet->length);
-
-                    #if DEBUG
-                    printf("%u:       After: '%s'.\n", (uint32_t)tid, str);
-                    #endif
-
+                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
+                if (strncmp(thread_data->token, str, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
+                    char *new_str = (char *)malloc(strlen(str) - TOKEN_LENGTH + 1);
+                    memset(new_str, 0, strlen(str) - TOKEN_LENGTH + 1);
+                    memcpy(new_str, str + TOKEN_LENGTH, strlen(str) - TOKEN_LENGTH);
                     free(str);
+                    str = new_str;
                 }
-                else if (result_type == CQL_RESULT_PREPARED) {
-                    #if DEBUG
-                    printf("%u:     It is a PREPARED result.\n", (uint32_t)tid);
-                    #endif
+                pthread_mutex_unlock(&thread_data->mutex); // Release mutex
 
-                    uint32_t offset = header_len + 4; // Because there can be a varied number of items, need to keep track of the offset in the packet
+                str_len = strlen(str);
+                str_len = htons(str_len);
+                memcpy((char *)packet + header_len + 4, &str_len, 2);
+                memcpy((char *)packet + header_len + 6, str, strlen(str));
 
-                    char *keyspace = NULL; // These will hold the name of the keyspace / table involved in the prepared statement
-                    char *table = NULL;
-
-                    uint16_t num_bytes = 0;
-                    memcpy(&num_bytes, (char *)packet + offset, 2);
-                    num_bytes = ntohs(num_bytes);
-                    offset += 2;
-
-                    #if DEBUG
-                    assert(num_bytes > 0); // It makes no sense to get no bytes back for the id, but the spec doesn't outlaw this
-                    #endif
-
-                    char *prepared_id = (char *)malloc(num_bytes);
-                    memcpy(prepared_id, (char *)packet + offset, num_bytes);
-                    offset += num_bytes;
-
-                    // FIXME now that we have the prepared statement id, store it so future attempts to execute it can be verified to come from the same user
-
-                    // Begin by getting the metadata for the prepared statement
-                    int32_t flags = 0;
-                    memcpy(&flags, (char *)packet + offset, 4);
-                    flags = ntohl(flags);
-                    offset += 4;
-
-                    int32_t columns_count = 0;
-                    memcpy(&columns_count, (char *)packet + offset, 4);
-                    columns_count = ntohl(columns_count);
-                    offset += 4;
-
-                    if (flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC) { // Get keyspace and table from global spec
-                        // Get the keyspace
-                        uint16_t str_len = 0;
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
-
-                        keyspace = (char *)malloc(str_len + 1);
-                        memset(keyspace, 0, str_len + 1);
-                        memcpy(keyspace, (char *)packet + offset, str_len);
-                        offset += str_len;
-
-                        // Get the table
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
-
-                        table = (char *)malloc(str_len + 1);
-                        memset(table, 0, str_len + 1);
-                        memcpy(table, (char *)packet + offset, str_len);
-                        offset += str_len;
-
-                        #if DEBUG
-                        printf("%u:       From the global tables spec, keyspace is '%s', table is '%s'.\n", (uint32_t)tid, keyspace, table);
-                        #endif
-                    }
-
-                    int i;
-                    for (i = 0; i < columns_count; i++) {
-                        uint16_t str_len = 0;
-
-                        if (i == 0 && !(flags & CQL_RESULT_ROWS_FLAG_GLOBAL_TABLES_SPEC)) { // Get keyspace and table from first column spec
-                            // Get the keyspace
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2;
-
-                            keyspace = (char *)malloc(str_len + 1);
-                            memset(keyspace, 0, str_len + 1);
-                            memcpy(keyspace, (char *)packet + offset, str_len);
-                            offset += str_len;
-
-                            // Get the table
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2;
-
-                            table = (char *)malloc(str_len + 1);
-                            memset(table, 0, str_len + 1);
-                            memcpy(table, (char *)packet + offset, str_len);
-                            offset += str_len;
-
-                            #if DEBUG
-                            printf("%u:       From the first column, keyspace is '%s', table is '%s'.\n", (uint32_t)tid, keyspace, table);
-                            #endif
-                        }
-
-                        memcpy(&str_len, (char *)packet + offset, 2);
-                        str_len = ntohs(str_len);
-                        offset += 2;
-
-                        char *column_name = (char *)malloc(str_len + 1);
-                        memset(column_name, 0, str_len + 1);
-                        memcpy(column_name, (char *)packet + offset, str_len);
-                        offset += str_len;
-
-                        uint16_t type_id = 0;
-                        memcpy(&type_id, (char *)packet + offset, 2);
-                        type_id = ntohs(type_id);
-                        offset += 2;
-
-                        #if DEBUG
-                        printf("%u:       Column name and type: '%s' %d.\n", (uint32_t)tid, column_name, type_id);
-                        #endif
-
-                        // Currently, we don't really care about what type each column is, but we need to advance the offset
-                        if (type_id == 0x0000) { // Custom type
-                            memcpy(&str_len, (char *)packet + offset, 2);
-                            str_len = ntohs(str_len);
-                            offset += 2 + str_len;
-                        }
-                        // FIXME currently assumes no more than a 2D list/map/set
-                        else if (type_id == 0x0020) { // List type
-                            uint16_t list_type_id = 0;
-                            memcpy(&list_type_id, (char *)packet + offset, 2);
-                            list_type_id = ntohs(list_type_id);
-                            offset += 2;
-
-                            if (list_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-                        else if (type_id == 0x0021) { // Map type
-                            // The key
-                            uint16_t map_type_id = 0;
-                            memcpy(&map_type_id, (char *)packet + offset, 2);
-                            map_type_id = ntohs(map_type_id);
-                            offset += 2;
-
-                            if (map_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-
-                            // The value
-                            memcpy(&map_type_id, (char *)packet + offset, 2);
-                            map_type_id = ntohs(map_type_id);
-                            offset += 2;
-
-                            if (map_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-                        else if (type_id == 0x0022) { // Set type
-                            uint16_t set_type_id = 0;
-                            memcpy(&set_type_id, (char *)packet + offset, 2);
-                            set_type_id = ntohs(set_type_id);
-                            offset += 2;
-
-                            if (set_type_id == 0x0000) {
-                                memcpy(&str_len, (char *)packet + offset, 2);
-                                str_len = ntohs(str_len);
-                                offset += 2 + str_len;
-                            }
-                        }
-
-                        free(column_name);
-                    }
-                }
-                else if (result_type == CQL_RESULT_SCHEMA_CHANGE) {
-                    #if DEBUG
-                    printf("%u:     It is a SCHEMA_CHANGE result.\n", (uint32_t)tid);
-                    #endif
-
-                    uint16_t str_len = 0;
-                    memcpy(&str_len, (char *)packet + header_len + 4, 2);
-                    str_len = ntohs(str_len);
-
-                    char *change = (char *)malloc(str_len + 1);
-                    memset(change, 0, str_len + 1);
-                    memcpy(change, (char *)packet + header_len + 6, str_len);
-
-                    memcpy(&str_len, (char *)packet + header_len + 6 + strlen(change), 2);
-                    str_len = ntohs(str_len);
-
-                    char *keyspace = (char *)malloc(str_len + 1);
-                    memset(keyspace, 0, str_len + 1);
-                    memcpy(keyspace, (char *)packet + header_len + 8 + strlen(change), str_len);
-
-                    memcpy(&str_len, (char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), 2);
-                    str_len = ntohs(str_len);
-
-                    char *table = (char *)malloc(str_len + 1);
-                    memset(table, 0, str_len + 1);
-                    memcpy(table, (char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), str_len);
-
-                    #if DEBUG
-                    printf("%u:       Before: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
-                    #endif
-
-                    pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
-                    if (strncmp(thread_data->token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
-                        char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
-                        memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
-                        memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
-                        free(keyspace);
-                        keyspace = new_keyspace;
-                    }
-                    pthread_mutex_unlock(&thread_data->mutex); // Release mutex
-
-                    #if DEBUG
-                    printf("%u:       After: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
-                    #endif
-
-                    // Since we are stripping data from the strings, we don't have to worry about overflowing the packet buffer
-                    str_len = strlen(keyspace);
-                    str_len = htons(str_len);
-                    memcpy((char *)packet + header_len + 6 + strlen(change), &str_len, 2);
-                    memcpy((char *)packet + header_len + 8 + strlen(change), keyspace, strlen(keyspace));
-
-                    str_len = strlen(table);
-                    str_len = htons(str_len);
-                    memcpy((char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), &str_len, 2);
-                    memcpy((char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), table, strlen(table));
-
-                    packet->length = 10 + strlen(change) + strlen(keyspace) + strlen(table);
-                    packet->length = htonl(packet->length);
-
-                    free(change);
-                    free(keyspace);
-                    free(table);
-                }
-                else { // Error!
-                    #if DEBUG
-                    printf("%u:       Got unexpected result kind %d from Cassandra -- exiting.\n", (uint32_t)tid, result_type);
-                    exit(1);
-                    #endif
-                }
+                packet->length = 6 + strlen(str);
+                packet->length = htonl(packet->length);
 
                 #if DEBUG
-                printf("%u:   Finished with RESULT, passing to client.\n", (uint32_t)tid);
+                printf("%u:       After: '%s'.\n", (uint32_t)tid, str);
+                #endif
+
+                free(str);
+            }
+            else if (result_type == CQL_RESULT_PREPARED) {
+                #if DEBUG
+                printf("%u:     It is a PREPARED result.\n", (uint32_t)tid);
+                #endif
+
+                uint32_t offset = header_len + 4; // Because there can be a varied number of items, need to keep track of the offset in the packet
+
+                uint16_t num_bytes = 0;
+                memcpy(&num_bytes, (char *)packet + offset, 2);
+                num_bytes = ntohs(num_bytes);
+                offset += 2;
+
+                #if DEBUG
+                assert(num_bytes > 0); // It makes no sense to get no bytes back for the id, but the spec doesn't outlaw this
+                #endif
+
+                char *prepared_id = (char *)malloc(num_bytes);
+                memcpy(prepared_id, (char *)packet + offset, num_bytes);
+                offset += num_bytes;
+
+                // FIXME now that we have the prepared statement id, store it so future attempts to execute it can be verified to come from the same user
+
+                cql_result_metadata_t *metadata = ReadResultMetadata((char *)packet + offset, (uint32_t)tid);
+                offset += metadata->offset; // Move the offset to the end of the metadata block
+
+                free(prepared_id);
+                FreeResultMetadata(metadata);
+            }
+            else if (result_type == CQL_RESULT_SCHEMA_CHANGE) {
+                #if DEBUG
+                printf("%u:     It is a SCHEMA_CHANGE result.\n", (uint32_t)tid);
+                #endif
+
+                uint16_t str_len = 0;
+                memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                str_len = ntohs(str_len);
+
+                char *change = (char *)malloc(str_len + 1);
+                memset(change, 0, str_len + 1);
+                memcpy(change, (char *)packet + header_len + 6, str_len);
+
+                memcpy(&str_len, (char *)packet + header_len + 6 + strlen(change), 2);
+                str_len = ntohs(str_len);
+
+                char *keyspace = (char *)malloc(str_len + 1);
+                memset(keyspace, 0, str_len + 1);
+                memcpy(keyspace, (char *)packet + header_len + 8 + strlen(change), str_len);
+
+                memcpy(&str_len, (char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), 2);
+                str_len = ntohs(str_len);
+
+                char *table = (char *)malloc(str_len + 1);
+                memset(table, 0, str_len + 1);
+                memcpy(table, (char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), str_len);
+
+                #if DEBUG
+                printf("%u:       Before: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                #endif
+
+                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
+                if (strncmp(thread_data->token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
+                    char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
+                    memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
+                    memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
+                    free(keyspace);
+                    keyspace = new_keyspace;
+                }
+                pthread_mutex_unlock(&thread_data->mutex); // Release mutex
+
+                #if DEBUG
+                printf("%u:       After: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
+                #endif
+
+                // Since we are stripping data from the strings, we don't have to worry about overflowing the packet buffer
+                str_len = strlen(keyspace);
+                str_len = htons(str_len);
+                memcpy((char *)packet + header_len + 6 + strlen(change), &str_len, 2);
+                memcpy((char *)packet + header_len + 8 + strlen(change), keyspace, strlen(keyspace));
+
+                str_len = strlen(table);
+                str_len = htons(str_len);
+                memcpy((char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), &str_len, 2);
+                memcpy((char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), table, strlen(table));
+
+                packet->length = 10 + strlen(change) + strlen(keyspace) + strlen(table);
+                packet->length = htonl(packet->length);
+
+                free(change);
+                free(keyspace);
+                free(table);
+            }
+            else { // Error!
+                #if DEBUG
+                printf("%u:       Got unexpected result kind %d from Cassandra -- exiting.\n", (uint32_t)tid, result_type);
+                exit(1);
                 #endif
             }
+
+            #if DEBUG
+            printf("%u:   Finished with RESULT, passing to client.\n", (uint32_t)tid);
+            #endif
+
         }
         else if (packet->opcode == CQL_OPCODE_EVENT) { // Process EVENT packet and possibly forward to client
             #if DEBUG
@@ -1545,7 +1247,9 @@ std::string process_cql_cmd(string st, const string prefix) {
 			found = holder.find(sys);
 	                if (found != std::string::npos || 
 (fields.size() == 2 && fields[1].compare(colon) == 0)){
+                                #if DEBUG
                                 cout << "System table found at pos: " << found << endl;
+                                #endif
                                 start = what[0].second;
 				continue;
                         }

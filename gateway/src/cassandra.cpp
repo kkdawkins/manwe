@@ -31,8 +31,8 @@ shared_ptr<cql::cql_builder_t> initCassandraBuilder(bool use_ssl){
         shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
         #if DEBUG
             std::cout << "[cassandra.cpp initCassandraBuilder] CQL Builder Created.\n";
+            builder->with_log_callback(&log_callback); // Only log when debugging
         #endif
-        builder->with_log_callback(&log_callback);
         builder->add_contact_point(boost::asio::ip::address::from_string(CASSANDRA_IP), CASSANDRA_PORT + 1);
         #if DEBUG
             std::cout << "[cassandra.cpp initCassandraBuilder] Builder Cluster Contact point Created.\n";
@@ -92,7 +92,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
         std::cout << "[cassandra.cpp checkToken] Create Cluster.\n";
     #endif
     
-		shared_ptr<cql::cql_cluster_t> cluster(initCassandraBuilder(use_ssl)->build());
+        shared_ptr<cql::cql_cluster_t> cluster(initCassandraBuilder(use_ssl)->build());
 		
     #if DEBUG
         std::cout << "[cassandra.cpp checkToken] Create Session.\n";
@@ -108,7 +108,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             #if DEBUG
                 std::cout << "[cassandra.cpp checkToken] Query - USE multiTenantCassandra.\n";
             #endif
-            boost::shared_ptr<cql::cql_query_t> use_system(
+            shared_ptr<cql::cql_query_t> use_system(
             new cql::cql_query_t("USE multiTenantCassandra;", cql::CQL_CONSISTENCY_ONE));
             
             // send the query to Cassandra
@@ -133,7 +133,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
                 std::cout << "[cassandra.cpp checkToken] Query - Attempt to find user token, prepare, send, compile.\n";
             #endif            
             // Execute a query where we attempt to find an internal token
-            boost::shared_ptr<cql::cql_query_t> select_internal(
+            shared_ptr<cql::cql_query_t> select_internal(
                 new cql::cql_query_t("SELECT internalToken, expiration FROM tokenTable WHERE userToken=?;", cql::CQL_CONSISTENCY_ONE));
                 // FIXME need to also verify that the token is still valid based on the expiration timestamp
                 
@@ -155,7 +155,7 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
             // read the hash (ID) returned by Cassandra as identificator of prepared query
             std::vector<cql::cql_byte_t> queryid = future.get().result->query_id();
             
-            boost::shared_ptr<cql::cql_execute_t> bound(
+            shared_ptr<cql::cql_execute_t> bound(
                 new cql::cql_execute_t(queryid, cql::CQL_CONSISTENCY_ONE));
                 
             

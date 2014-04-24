@@ -14,13 +14,19 @@ gateway.o:	gateway.hpp gateway.cpp
 
 helpers.o:	helpers.hpp helpers.cpp
 	$(CC) -c helpers.cpp $(CFLAGS)
-	
+
 cassandra.o: cassandra.hpp cassandra.cpp
 	$(CC) -c cassandra.cpp $(CFLAGS)
 
 debug:
 	$(MAKE) clean
 	$(MAKE) CFLAGS="$(CFLAGS) $(DEBUG_FLAGS)"
+	@echo "\nNow run something like \`$(VALGRIND) --leak-check=full --show-reachable=yes ./gateway <IP>\`"
+
+profile:
+	$(MAKE) clean
+	$(MAKE) CFLAGS="$(CFLAGS) $(DEBUG_FLAGS) -UDEBUG" #For profiling, don't print output as that can mess up time results
+	@echo "\nNow run something like \`$(VALGRIND) --tool=callgrind ./gateway <IP>\`"
 
 clean:
 	rm -rf *.o gateway
