@@ -169,6 +169,7 @@ cql_result_cell_t* ReadCQLResults(char *buf, int32_t rows, int32_t cols) {
     }
 
     cql_result_cell_t *row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
+    row->remove = false;
     cql_result_cell_t *ret = row;
 
     uint32_t offset = 0;
@@ -206,6 +207,7 @@ cql_result_cell_t* ReadCQLResults(char *buf, int32_t rows, int32_t cols) {
 
         if (i + 1 < rows) {
             row->next_row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
+            row->next_row->remove = false;
             row = row->next_row;
         }
     }
@@ -543,3 +545,66 @@ bool findNode(node *head, int8_t stream_id){
     }
     return false;
 }
+
+// Check if the internal token is present in this column data
+bool scanForInternalToken(char *cellInQuestion, char *internalToken){
+    std::string cell(cellInQuestion);
+    std::string iToken(internalToken);
+    
+    std::size_t found = cell.find(iToken);
+    if (found == std::string::npos){
+        // The user's token was not found in the cell data
+        return false;
+    }else{
+        return true;
+    }
+}
+
+// TODO : verify that I am not missing any frees or Mathias will be mad!
+void free_row(cql_result_cell_t *row){
+    cql_result_cell_t *curr;
+    curr = row;
+    while(curr != NULL){
+        row = row->next_row;
+        free(curr);
+        curr = row;
+    }
+}
+
+// Return's a pointer to a new cleaned-up list
+cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table){
+    cql_result_cell_t *curr_row = parsed_table;
+    cql_result_cell_t *tmp;
+    
+    
+    // First, check the head
+    while(curr_row->remove == true){
+        tmp = curr_row;
+        curr_row = curr_row->next_row;
+        free_row(tmp);
+    }
+    
+    // update the head pointer
+    parsed_table = curr_row;
+    
+    
+    // Second, scan and remove the rest
+    tmp = curr_row->next_row; // Walk tmp pointer one ahead
+    while(tmp != NULL){
+        while(tmp != NULL && tmp->remove == true){
+            curr_row->next_row = tmp->next_row;
+            free(tmp);
+            tmp = curr_row->next_row;
+        }
+        if(tmp == NULL){
+            break;
+        }
+        curr_row = tmp;
+        tmp = curr_row->next_row;
+    }
+    
+    return parsed_table;
+}
+
+
+

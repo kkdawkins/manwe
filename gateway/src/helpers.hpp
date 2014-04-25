@@ -14,6 +14,7 @@ typedef struct cql_string_map {
 typedef struct cql_result_cell {
   char *content; // generic storage of the contents of this particular cell
   int32_t len;   // length of content buffer
+  bool remove;   // Only used on the head cell of each row
   struct cql_result_cell *next_col; // pointer to the next column in this row
   struct cql_result_cell *next_row; // pointer to the next row (first column only)
 } cql_result_cell_t;
@@ -59,5 +60,8 @@ void cassandra_thread_cleanup_handler(void *arg);
 
 node* addNode(node *head, node *toAdd);
 bool findNode(node *head, int8_t stream_id);
+
+bool scanForInternalToken(char *cellInQuestion, char *internalToken);
+cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table);
 
 #endif

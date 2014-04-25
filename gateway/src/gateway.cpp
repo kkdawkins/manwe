@@ -871,7 +871,37 @@ void* HandleConnCassandra(void* td) {
                 cql_result_cell_t *parsed_table = ReadCQLResults((char *)packet + offset, rows_count, metadata->columns_count);
 
                 // TODO - Kevin, filter rows here
-
+                
+                if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
+                    cql_result_cell_t *rowPtr = parsed_table;
+                    cql_result_cell_t *colPtr = parsed_table;
+                    cql_column_spec_t *colTypeMap = metadata->column;
+                    #if DEBUG
+                    printf("%u:   Begin filtering interesting packet with stream ID %d.\n", (uint32_t)tid,packet->stream);
+                    #endif
+                    
+                    /*
+                    * Scan row by row and iterate through each col
+                    * As we iterate through each col, iterate through the map of col->type looking for string
+                    * TODO: Should I adhear to the Cassandra system table doc?
+                    */
+                    while(rowPtr != NULL){
+                        while(colPtr != NULL){
+                            if(colTypeMap->type == 0xFFFF){ // string for now TODO find out what string / text tokens are
+                                if(!scanForInternalToken(colPtr->content, thread_data->token)){
+                                    // False, so the internal token did not appear in the column data, must remove
+                                    rowPtr->remove = true;
+                                }
+                            }
+                            colTypeMap = colTypeMap->next;
+                            colPtr = colPtr->next_col;
+                        }
+                        colTypeMap = metadata->column;
+                        rowPtr = rowPtr->next_row;
+                    }
+                }
+                cleanup(parsed_table);
+            
                 uint32_t buf_len = 0;
                 char *new_rows = WriteCQLResults(parsed_table, &buf_len, &rows_count);
 
