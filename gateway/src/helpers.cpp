@@ -525,7 +525,7 @@ bool removeNode(node *head, node *toRemove) {
     }else{
         tmp = head;
         while(tmp->next != NULL){
-            if(tmp->next->id != toRemove->id){
+            if(tmp->next->id == toRemove->id){
                 tmp2 = tmp->next->next;
                 free(tmp->next);
                 tmp->next = tmp2; // Works even if tmp->next is the end, it will be null
