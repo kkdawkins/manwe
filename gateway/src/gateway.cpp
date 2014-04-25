@@ -1220,6 +1220,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("USE (.*?);"));
+	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
@@ -1262,11 +1263,17 @@ std::string process_cql_cmd(string st, string prefix) {
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;			
 			} else if(fields[0].compare(table) == 0){
+				found = fields[1].find('.');
+				if (found!=std::string::npos){
                                 std::string app( "TABLE " + prefix + fields[1]);
                                 replacements[str] = app;
+				}
                         } else if (fields[0].compare(from) == 0 ){
-				std::string app( "FROM " + prefix + fields[1]);
-				replacements[str] = app;
+				found = fields[1].find('.');
+				if (found!=std::string::npos){
+					std::string app( "FROM " + prefix + fields[1]);
+					replacements[str] = app; 
+				}
 			} else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
 				int n = fields.size();
 				std::string feed("");
