@@ -899,8 +899,9 @@ void* HandleConnCassandra(void* td) {
                         colTypeMap = metadata->column;
                         rowPtr = rowPtr->next_row;
                     }
+                    cleanup(parsed_table);
                 }
-                cleanup(parsed_table);
+                
             
                 uint32_t buf_len = 0;
                 char *new_rows = WriteCQLResults(parsed_table, &buf_len, &rows_count);
