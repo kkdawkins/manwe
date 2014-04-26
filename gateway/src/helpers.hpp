@@ -62,7 +62,7 @@ node* addNode(node *head, node *toAdd);
 bool findNode(node *head, int8_t stream_id);
 
 bool scanForInternalToken(char *cellInQuestion, char *internalToken);
-cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table);
+cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid);
 bool isImportantTable(char *tableName);
 bool isImportantColumn(char *name);
 

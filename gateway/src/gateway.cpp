@@ -864,7 +864,7 @@ void* HandleConnCassandra(void* td) {
                 
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
                 // An interesting packet was tagged on the way to Cassandra AND impacts a "private table"
-                bool isInterestingPacket = false && findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->table);
+                bool isInterestingPacket = findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->table);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
                 
                 if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
@@ -885,6 +885,9 @@ void* HandleConnCassandra(void* td) {
                             if(isImportantColumn(colTypeMap->name)){
                                 if(!scanForInternalToken(colPtr->content, thread_data->token)){
                                     // False, so the internal token did not appear in the column data, must remove
+                                    #if DEBUG
+                                    printf("%u:   Found a column that requires removal.\n", (uint32_t)tid);
+                                    #endif
                                     rowPtr->remove = true;
                                 }
                             }
@@ -894,7 +897,7 @@ void* HandleConnCassandra(void* td) {
                         colTypeMap = metadata->column;
                         rowPtr = rowPtr->next_row;
                     }
-                    cleanup(parsed_table);
+                    cleanup(parsed_table,(uint32_t)tid);
                 }
                 
             

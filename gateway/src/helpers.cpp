@@ -565,18 +565,26 @@ void free_row(cql_result_cell_t *row){
     cql_result_cell_t *curr;
     curr = row;
     while(curr != NULL){
-        row = row->next_row;
+        row = row->next_col;
         free(curr);
         curr = row;
     }
 }
 
 // Return's a pointer to a new cleaned-up list
-cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table){
+cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid){
     cql_result_cell_t *curr_row = parsed_table;
     cql_result_cell_t *tmp;
+    #ifndef DEBUG
+    (void)tid; // Need to reference variable if not debugging to prevent error
+    #endif    
+    #if DEBUG
+    printf("%u:   Begin cleanup of table.\n", tid);
+    #endif
     
-    
+    if(parsed_table == NULL){
+        return NULL;
+    }
     // First, check the head
     while(curr_row != NULL && curr_row->remove == true){
         tmp = curr_row;
