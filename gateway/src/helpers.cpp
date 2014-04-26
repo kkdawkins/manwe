@@ -486,28 +486,35 @@ void cassandra_thread_cleanup_handler(void *arg) {
 
 
 
-node* addNode(node *head, node *toAdd){
-    node *tmp;
-    if(head == NULL){
+bool addNode(node *head, node *toAdd) {
+    if (toAdd == NULL) {
+        return false;
+    }
+
+    if (head == NULL) {
         head = toAdd;
-        return head;
-    }else{
-        tmp = head;
-        while(tmp->next != NULL){
+    }
+    else {
+        node *tmp = head;
+        while (tmp->next != NULL) {
             tmp = tmp->next;
         }
         tmp->next = toAdd;
-        return head;
     }
-    return NULL;
+    return true;
 }
 
-bool removeNode(node *head, node *toRemove){
+bool removeNode(node *head, node *toRemove) {
+    if (head == NULL || toRemove == NULL) {
+        return false;
+    }
+
     node *tmp;
     node *tmp2;
     if(head->id == toRemove->id){
         if(head->next == NULL){
             free(head);
+            head = NULL;
             return true;
         }else{
             tmp = head->next;
@@ -518,7 +525,7 @@ bool removeNode(node *head, node *toRemove){
     }else{
         tmp = head;
         while(tmp->next != NULL){
-            if(tmp->next->id != toRemove->id){
+            if(tmp->next->id == toRemove->id){
                 tmp2 = tmp->next->next;
                 free(tmp->next);
                 tmp->next = tmp2; // Works even if tmp->next is the end, it will be null
@@ -532,14 +539,19 @@ bool removeNode(node *head, node *toRemove){
     return false;
 }
 
-bool findNode(node *head, int8_t stream_id){
+bool findNode(node *head, int8_t stream_id) {
+    if (head == NULL) {
+        return false;
+    }
+
     node *tmp = head;
     
-    while(tmp != NULL){
+    while (tmp != NULL) {
+        #if DEBUG
         printf("----------- tmp %d stream %d\n", tmp->id, stream_id);
-        if(tmp->id == stream_id){
-            removeNode(head, tmp);
-            return true;
+        #endif
+        if (tmp->id == stream_id) {
+            return removeNode(head, tmp);
         }
         tmp = tmp->next;
     }

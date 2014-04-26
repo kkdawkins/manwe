@@ -58,7 +58,8 @@ void FreeResultMetadata(cql_result_metadata_t *m);
 void gracefulExit(int sig);
 void cassandra_thread_cleanup_handler(void *arg);
 
-node* addNode(node *head, node *toAdd);
+bool addNode(node *head, node *toAdd);
+bool removeNode(node *head, node *toRemove);
 bool findNode(node *head, int8_t stream_id);
 
 bool scanForInternalToken(char *cellInQuestion, char *internalToken);
