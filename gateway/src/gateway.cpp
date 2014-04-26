@@ -1248,8 +1248,8 @@ std::string process_cql_cmd(string st, string prefix) {
 	//push various regular expressions
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
-	my_exps.push_back(std::string("USE (.*?);"));
-	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+"));
+	//my_exps.push_back(std::string("USE (.*?);"));
+	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
