@@ -616,5 +616,11 @@ bool isImportantTable(char *tableName){
     }
 }
 
-
+bool isImportantColumn(char *name){
+    if(strcmp(name,"keyspace_name") == 0){
+        return true;
+    }else{
+        return false;
+    }
+}
 

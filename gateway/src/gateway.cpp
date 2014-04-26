@@ -882,7 +882,7 @@ void* HandleConnCassandra(void* td) {
                     */
                     while(rowPtr != NULL){
                         while(colPtr != NULL){
-                            if(colTypeMap->type == 0xFFFF){ // string for now TODO find out what string / text tokens are
+                            if(isImportantColumn(colTypeMap->name)){
                                 if(!scanForInternalToken(colPtr->content, thread_data->token)){
                                     // False, so the internal token did not appear in the column data, must remove
                                     rowPtr->remove = true;
