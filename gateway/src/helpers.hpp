@@ -63,5 +63,6 @@ bool findNode(node *head, int8_t stream_id);
 
 bool scanForInternalToken(char *cellInQuestion, char *internalToken);
 cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table);
+bool isImportantTable(char *tableName);
 
 #endif

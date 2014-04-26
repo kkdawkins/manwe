@@ -578,7 +578,7 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table){
     
     
     // First, check the head
-    while(curr_row->remove == true){
+    while(curr_row != NULL && curr_row->remove == true){
         tmp = curr_row;
         curr_row = curr_row->next_row;
         free_row(tmp);
@@ -604,6 +604,16 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table){
     }
     
     return parsed_table;
+}
+
+bool isImportantTable(char *tableName){
+    if(strcmp(tableName,"schema_keyspaces") == 0){
+        return true;
+    }else if(strcmp(tableName,"schema_columns") == 0){
+        return true;
+    }else{
+        return false;
+    }
 }
 
 

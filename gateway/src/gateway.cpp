@@ -821,16 +821,6 @@ void* HandleConnCassandra(void* td) {
 
             // FIXME need to consider that the tracing flag may be set. If so, there will be a [uuid] before the rest of the packet body
 
-            pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-            bool isInterestingPacket = false && findNode(thread_data->interestingPackets, packet->stream);
-            pthread_mutex_unlock(&thread_data->mutex); // Release mutex
-
-            if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
-                #if DEBUG
-                printf("%u:   Caught an interesting packet with stream ID %d going to user.\n", (uint32_t)tid,packet->stream);
-                #endif
-            }
-
             #if DEBUG
             printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
             printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
@@ -871,6 +861,11 @@ void* HandleConnCassandra(void* td) {
                 cql_result_cell_t *parsed_table = ReadCQLResults((char *)packet + offset, rows_count, metadata->columns_count);
 
                 // TODO - Kevin, filter rows here
+                
+                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
+                // An interesting packet was tagged on the way to Cassandra AND impacts a "private table"
+                bool isInterestingPacket = false && findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->table);
+                pthread_mutex_unlock(&thread_data->mutex); // Release mutex
                 
                 if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
                     cql_result_cell_t *rowPtr = parsed_table;
