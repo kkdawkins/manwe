@@ -780,10 +780,88 @@ void* HandleConnCassandra(void* td) {
 
         // Modify packet (if needed)
         if (packet->opcode == CQL_OPCODE_ERROR) { // CQL ERROR packet
-            // FIXME error message may contain the internal token as part of the keyspace / username. Need to strip it out
+            #if DEBUG
+            printf("%u:   Handling ERROR packet from Cassandra.\n", (uint32_t)tid);
+            #endif
+
+            int32_t error_code = 0;
+            memcpy(&error_code, (char *)packet + header_len, 4);
+            error_code = ntohl(error_code);
+
+            uint16_t str_len = 0;
+            memcpy(&str_len, (char *)packet + header_len + 4, 2);
+            str_len = ntohs(str_len);
+
+            char *err = (char *)malloc(str_len + 1);
+            memset(err, 0, str_len + 1);
+            memcpy(err, (char *)packet + header_len + 6, str_len);
 
             #if DEBUG
-            printf("%u:   Saw ERROR packet.\n", (uint32_t)tid);
+            printf("%u:     Error code: 0x%04X; msg: %s\n", (uint32_t)tid, error_code, err);
+            #endif
+
+            // Strip out the prefix token from the error string
+            while (strstr(err, thread_data->token) != NULL) {
+                char *p = strstr(err, thread_data->token);
+                memmove(p, p + TOKEN_LENGTH, 1 + strlen(p + TOKEN_LENGTH));
+            }
+
+            #if DEBUG
+            printf("%u:     Error code: 0x%04X; msg: %s\n", (uint32_t)tid, error_code, err);
+            #endif
+
+            // Now, rebuild the packet
+            uint16_t new_str_len = strlen(err);
+
+            packet->length = htonl(body_len - (str_len - new_str_len));
+            new_str_len = htons(new_str_len);
+            memcpy((char *)packet + header_len + 4, &new_str_len, 2);
+            new_str_len = strlen(err);
+            memcpy((char *)packet + header_len + 6, err, new_str_len);
+
+            free(err);
+
+            if (body_len > (uint32_t)str_len + 6) { // Per spec, there may be additional data after the error code and string. If so, shift that data so it remains in the packet
+                memmove((char *)packet + header_len + 6 + new_str_len, (char *)packet + header_len + 6 + str_len, body_len - 6 - str_len);
+            }
+
+            if (error_code == 0x2400) { // This is an "already exists" error, and the rest of the body contains the affected keyspace and table. Need to filter the keyspace name.
+                char *b = (char *)packet + header_len + 6 + new_str_len;
+                uint32_t b_len = body_len - str_len - 6;
+                memcpy(&str_len, b, 2);
+                str_len = ntohs(str_len);
+
+                char *ks = (char *)malloc(str_len + 1);
+                memset(ks, 0, str_len + 1);
+                memcpy(ks, b + 2, str_len);
+
+                #if DEBUG
+                printf("%u:       Keyspace is '%s'.\n", (uint32_t)tid, ks);
+                #endif
+
+                char *new_ks = (char *)malloc(strlen(ks) - TOKEN_LENGTH + 1);
+                memset(new_ks, 0, strlen(ks) - TOKEN_LENGTH + 1);
+                memcpy(new_ks, ks + TOKEN_LENGTH, strlen(ks) - TOKEN_LENGTH);
+                free(ks);
+                ks = new_ks;
+                str_len -= TOKEN_LENGTH;
+
+                #if DEBUG
+                printf("%u:       Keyspace changed to '%s'.\n", (uint32_t)tid, ks);
+                #endif
+
+                str_len = htons(str_len);
+                memcpy(b, &str_len, 2);
+                memcpy(b + 2, ks, strlen(ks));
+                memmove(b + 2 + strlen(ks), b + 2 + strlen(ks) + TOKEN_LENGTH, b_len - 2 - strlen(ks) - TOKEN_LENGTH);
+
+                packet->length = htonl(ntohl(packet->length) - TOKEN_LENGTH);
+
+                free(ks);
+            }
+
+            #if DEBUG
+            printf("%u:   Finished with ERROR, passing to client.\n", (uint32_t)tid);
             #endif
         }
         else if (packet->opcode == CQL_OPCODE_READY) { // CQL READY packet

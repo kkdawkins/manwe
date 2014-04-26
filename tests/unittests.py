@@ -45,6 +45,7 @@ class TestCassandraQueries(unittest.TestCase):
 
     ########## These queries come from looking at queries made automatically when connecting to Cassandra ##########
     ########## They demonstrate the possibility of leaking information about tenants in the system ##########
+    ########## (There are additional startup queries, but they deal only with getting peer information, so we can ignore them) ##########
 
     def test_connect_1_select_system_keyspaces(self):
         ########## Test getting initial keyspaces ##########
@@ -62,14 +63,22 @@ class TestCassandraQueries(unittest.TestCase):
 
         rows = self._session.execute("SELECT * FROM system.schema_columnfamilies;")
 
-        # FIXME todo
+        # 21 rows should be returned in a fresh Cassandra instance
+        self.assertEqual(len(rows), 21)
+
+        for row in rows:
+            self.assertTrue(row.keyspace_name in ["system", "system_auth", "system_traces"], "Got unexpected keyspace '%s'" % row.keyspace_name)
 
     def test_connect_3_select_system_columns(self):
         ########## Test getting initial columns ##########
 
         rows = self._session.execute("SELECT * FROM system.schema_columns;")
 
-        # FIXME todo
+        # 130 rows should be returned in a fresh Cassandra instance
+        self.assertEqual(len(rows), 130)
+
+        for row in rows:
+            self.assertTrue(row.keyspace_name in ["system", "system_auth", "system_traces"], "Got unexpected keyspace '%s'" % row.keyspace_name)
 
     def test_tenant_users(self):
         ########## Test that the only users we see are ours ##########

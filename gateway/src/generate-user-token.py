@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS tokenTable (
     userToken = "%020x" % (random.randrange(16**TOKEN_LENGTH))
 
     # FIXME currently tokens do not expire unless revoked
-    expire = 0
+    expire = datetime.datetime.utcfromtimestamp(0)
 
     # Add the new tenant to the tokenTable
     cmd = session.prepare("INSERT INTO tokenTable (internalToken, userToken, userId, expiration, comment) VALUES (?, ?, ?, ?, ?);")
