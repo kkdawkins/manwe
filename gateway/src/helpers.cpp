@@ -486,13 +486,14 @@ void cassandra_thread_cleanup_handler(void *arg) {
 
 
 
-bool addNode(node *head, node *toAdd) {
+node* addNode(node *head, node *toAdd) {
     if (toAdd == NULL) {
-        return false;
+        return head;
     }
 
     if (head == NULL) {
         head = toAdd;
+        return head;
     }
     else {
         node *tmp = head;
@@ -501,7 +502,7 @@ bool addNode(node *head, node *toAdd) {
         }
         tmp->next = toAdd;
     }
-    return true;
+    return head;
 }
 
 bool removeNode(node *head, node *toRemove) {
