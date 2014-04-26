@@ -227,7 +227,7 @@ class TestCassandraQueries(unittest.TestCase):
 	self._session.execute("DROP KEYSPACE test;")
 	
 	
-    def test_AAAUPDATE(self):
+    def test_UPDATE(self):
         self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
         self._session.execute("CREATE TABLE test.emp (empID int,deptID int,first_name varchar,last_name varchar,PRIMARY KEY (empID, deptID));")
 	self._session.execute("INSERT \nINTO \ntest.emp (empID,deptID,first_name,last_name)VALUES (123,45,'karan','chadha');")
@@ -262,6 +262,54 @@ class TestCassandraQueries(unittest.TestCase):
 	self._session.execute("DROP TABLE test.emp;")
 	self._session.execute("DROP TABLE test.users;")
 	self._session.execute("DROP KEYSPACE test;")
+
+    def test_CREATE_USER_PERMISSIONS(self):
+	#Have to be superuser to execute the following queries
+
+	self._session.execute("CREATE KEYSPACE test1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+	self._session.execute("CREATE TABLE test1.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")
+	self._session.execute("INSERT INTO test1.users (user_name, password, gender,session_token,state,birth_year)VALUES ('kchadha','test123','male','12345abc2323','AZ',1990);")
+	self._session.execute("CREATE KEYSPACE test2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+	self._session.execute("CREATE USER spillman WITH PASSWORD 'Niner27';")
+	self._session.execute("CREATE USER akers WITH PASSWORD 'Niner2' SUPERUSER;")
+	self._session.execute("CREATE USER 'boone12' WITH PASSWORD 'Niner75' NOSUPERUSER;")
+	self._session.execute("GRANT SELECT ON ALL KEYSPACES TO spillman;")
+	self._session.execute("GRANT MODIFY ON KEYSPACE test2 TO akers;")
+	self._session.execute("GRANT ALTER ON KEYSPACE test2 TO 'boone12';")
+	self._session.execute("GRANT ALL PERMISSIONS ON test1.users TO 'boone12';")
+	self._session.execute("GRANT ALL ON KEYSPACE test1 TO spillman;")
+	rows = self._session.execute("LIST USERS;")
+	self.assertEqual(len(rows), 4)
+	for row in rows:
+            self.assertTrue(row.name in ["cassandra", "spillman", "akers","boone12"], "Got unexpected user '%s'" % row.name)
+
+	rows = self._session.execute("LIST ALL PERMISSIONS OF akers;")
+	self.assertEqual(len(rows), 1)
+	for row in rows:
+            self.assertTrue(row.permission in ["MODIFY"], "Got unexpected permission '%s'" % row.permission)
+
+	rows = self._session.execute("LIST ALL PERMISSIONS OF 'boone12';")
+	self.assertEqual(len(rows), 7)
+	for row in rows:
+            self.assertTrue(row.permission in ["MODIFY","CREATE","ALTER","DROP","AUTHORIZE","SELECT"], "Got unexpected permission '%s'" % row.permission)
+
+	rows = self._session.execute("LIST ALL PERMISSIONS ON test1.users;")
+	self.assertEqual(len(rows), 13)
+	for row in rows:
+            self.assertTrue(row.permission in ["MODIFY","CREATE","ALTER","DROP","AUTHORIZE","SELECT"], "Got unexpected permission '%s'" % row.permission)
+
+	self._session.execute("REVOKE SELECT ON test1.users FROM 'boone12';")
+	rows = self._session.execute("LIST ALL PERMISSIONS OF 'boone12';")
+	self.assertEqual(len(rows), 6)
+	for row in rows:
+            self.assertTrue(row.permission in ["MODIFY","CREATE","ALTER","DROP","AUTHORIZE"], "Got unexpected permission '%s'" % row.permission)
+
+	self._session.execute("DROP USER spillman;")
+	self._session.execute("DROP USER akers;")
+	self._session.execute("DROP USER 'boone12';")
+	self._session.execute("TRUNCATE test1.users;")
+	self._session.execute("DROP KEYSPACE test1;")
+	self._session.execute("DROP KEYSPACE test2;")
 
 
     def test_CREATE_INSERT_TABLE(self):

@@ -489,13 +489,11 @@ void cassandra_thread_cleanup_handler(void *arg) {
 
 
 node* addNode(node *head, node *toAdd) {
-
     if (toAdd == NULL) {
         return head;
     }
 
     if (head == NULL) {
-        printf("2\n");
         head = toAdd;
         return head;
     }
