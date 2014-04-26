@@ -522,7 +522,7 @@ void* HandleConnClient(void* td) {
                 interesting_packet->id = packet->stream;
                 interesting_packet->next = NULL;
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-                thread_data->interestingPackets = addNode(thread_data->interestingPackets, interesting_packet);
+                addNode(thread_data->interestingPackets, interesting_packet);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
             }
 
@@ -583,7 +583,7 @@ void* HandleConnClient(void* td) {
                 interesting_packet->id = packet->stream;
                 interesting_packet->next = NULL;
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-                thread_data->interestingPackets = addNode(thread_data->interestingPackets, interesting_packet);
+                addNode(thread_data->interestingPackets, interesting_packet);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
             }
 
