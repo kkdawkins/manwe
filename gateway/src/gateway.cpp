@@ -514,15 +514,15 @@ void* HandleConnClient(void* td) {
                 
             if (interestingPacket(cpp_string)) {
                 
-                #if DEBUG
+                //#if DEBUG
                 printf("%u:       Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
-                #endif
+                //#endif
                     
                 node *interesting_packet = (node *)malloc(sizeof(node));
                 interesting_packet->id = packet->stream;
                 interesting_packet->next = NULL;
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-                addNode(thread_data->interestingPackets, interesting_packet);
+                thread_data->interestingPackets = addNode(thread_data->interestingPackets, interesting_packet);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
             }
 
@@ -583,7 +583,7 @@ void* HandleConnClient(void* td) {
                 interesting_packet->id = packet->stream;
                 interesting_packet->next = NULL;
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
-                addNode(thread_data->interestingPackets, interesting_packet);
+                thread_data->interestingPackets = addNode(thread_data->interestingPackets, interesting_packet);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
             }
 
@@ -943,6 +943,7 @@ void* HandleConnCassandra(void* td) {
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
                 // An interesting packet was tagged on the way to Cassandra AND impacts a "private table"
                 bool isInterestingPacket = findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->table);
+                thread_data->interestingPackets = removeNode(thread_data->interestingPackets, packet->stream);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
                 
                 if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
@@ -958,24 +959,38 @@ void* HandleConnCassandra(void* td) {
                     * As we iterate through each col, iterate through the map of col->type looking for string
                     * TODO: Should I adhear to the Cassandra system table doc?
                     */
-                    while(rowPtr != NULL){
-                        while(colPtr != NULL){
+                    int i = 0;
+                    int j = 0;
+                    while(rowPtr != NULL && i < rows_count){
+                        colPtr = rowPtr;
+                        j = 0;
+                        while(colPtr != NULL && j < metadata->columns_count){
                             if(isImportantColumn(colTypeMap->name)){
-                                if(!scanForInternalToken(colPtr->content, thread_data->token)){
+                                if(!scanForInternalToken(colPtr->content, thread_data->token) || scanforRestrictedKeyspaces(colPtr->content)){
                                     // False, so the internal token did not appear in the column data, must remove
                                     #if DEBUG
-                                    printf("%u:   Found a column that requires removal.\n", (uint32_t)tid);
+                                    printf("%u:   Found a column that requires removal: %s.\n", (uint32_t)tid, colPtr->content);
                                     #endif
                                     rowPtr->remove = true;
+                                    //rows_count --;
                                 }
                             }
                             colTypeMap = colTypeMap->next;
                             colPtr = colPtr->next_col;
+                            j = j + 1;
                         }
                         colTypeMap = metadata->column;
                         rowPtr = rowPtr->next_row;
+                        
+                        i = i + 1;
                     }
-                    cleanup(parsed_table,(uint32_t)tid);
+                    #if DEBUG
+                    printf("Going to cleanup\n");
+                    #endif
+                    parsed_table = cleanup(parsed_table,(uint32_t)tid);
+                    #if DEBUG
+                    printf("Finished cleanup\n");
+                    #endif
                 }
                 
             

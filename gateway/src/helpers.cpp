@@ -170,6 +170,7 @@ cql_result_cell_t* ReadCQLResults(char *buf, int32_t rows, int32_t cols) {
 
     cql_result_cell_t *row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
     row->remove = false;
+    row->next_row = NULL;
     cql_result_cell_t *ret = row;
 
     uint32_t offset = 0;
@@ -208,6 +209,7 @@ cql_result_cell_t* ReadCQLResults(char *buf, int32_t rows, int32_t cols) {
         if (i + 1 < rows) {
             row->next_row = (cql_result_cell_t *)malloc(sizeof(cql_result_cell_t));
             row->next_row->remove = false;
+            row->next_row->next_row = NULL;
             row = row->next_row;
         }
     }
@@ -486,13 +488,16 @@ void cassandra_thread_cleanup_handler(void *arg) {
 
 
 
-bool addNode(node *head, node *toAdd) {
+node* addNode(node *head, node *toAdd) {
+
     if (toAdd == NULL) {
-        return false;
+        return head;
     }
 
     if (head == NULL) {
+        printf("2\n");
         head = toAdd;
+        return head;
     }
     else {
         node *tmp = head;
@@ -501,42 +506,45 @@ bool addNode(node *head, node *toAdd) {
         }
         tmp->next = toAdd;
     }
-    return true;
+    return head;
 }
 
-bool removeNode(node *head, node *toRemove) {
-    if (head == NULL || toRemove == NULL) {
-        return false;
+node* removeNode(node *head, int8_t stream_id) {
+    if (head == NULL) {
+        return NULL;
     }
 
     node *tmp;
     node *tmp2;
-    if(head->id == toRemove->id){
+    if(head->id == stream_id){
+
         if(head->next == NULL){
+
             free(head);
             head = NULL;
-            return true;
+            return NULL;
         }else{
+
             tmp = head->next;
             free(head);
             head = tmp;
-            return true;
+            return head;
         }
     }else{
         tmp = head;
         while(tmp->next != NULL){
-            if(tmp->next->id == toRemove->id){
+            if(tmp->next->id == stream_id){
                 tmp2 = tmp->next->next;
                 free(tmp->next);
                 tmp->next = tmp2; // Works even if tmp->next is the end, it will be null
-                return true;
+                return head;
             }
             tmp = tmp->next;
         }
         // if we got here, we never found it
-        return false;
+        return head;
     }
-    return false;
+    return head;
 }
 
 bool findNode(node *head, int8_t stream_id) {
@@ -551,7 +559,8 @@ bool findNode(node *head, int8_t stream_id) {
         printf("----------- tmp %d stream %d\n", tmp->id, stream_id);
         #endif
         if (tmp->id == stream_id) {
-            return removeNode(head, tmp);
+            //head = removeNode(head, tmp);
+            return true;
         }
         tmp = tmp->next;
     }
@@ -566,6 +575,22 @@ bool scanForInternalToken(char *cellInQuestion, char *internalToken){
     std::size_t found = cell.find(iToken);
     if (found == std::string::npos){
         // The user's token was not found in the cell data
+        // Apparently there are some exceptions to this rule:
+        std::string system("system");
+        if(cell.find(system) != std::string::npos){
+            return true;
+        }
+        return false;
+    }else{
+        return true;
+    }
+}
+
+bool scanforRestrictedKeyspaces(char *cellInQuestion){
+    std::string cell(cellInQuestion);
+    std::string multiTennant("multitenantcassandra");
+    std::size_t found = cell.find(multiTennant);
+    if(found == std::string::npos){
         return false;
     }else{
         return true;
@@ -602,6 +627,10 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid){
         tmp = curr_row;
         curr_row = curr_row->next_row;
         free_row(tmp);
+    }
+    
+    if(curr_row == NULL){
+        return NULL;
     }
     
     // update the head pointer

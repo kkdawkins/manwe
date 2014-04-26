@@ -58,11 +58,12 @@ void FreeResultMetadata(cql_result_metadata_t *m);
 void gracefulExit(int sig);
 void cassandra_thread_cleanup_handler(void *arg);
 
-bool addNode(node *head, node *toAdd);
-bool removeNode(node *head, node *toRemove);
+node* addNode(node *head, node *toAdd);
+node* removeNode(node *head, int8_t stream_id);
 bool findNode(node *head, int8_t stream_id);
 
 bool scanForInternalToken(char *cellInQuestion, char *internalToken);
+bool scanforRestrictedKeyspaces(char *cellInQuestion);
 cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid);
 bool isImportantTable(char *tableName);
 bool isImportantColumn(char *name);
