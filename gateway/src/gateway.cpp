@@ -1329,6 +1329,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string update("UPDATE");
 	std::string schema("SCHEMA");
 	std::string table("TABLE");
+	std::string on("ON");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -1341,11 +1342,11 @@ std::string process_cql_cmd(string st, string prefix) {
 	//push various regular expressions
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
-	//my_exps.push_back(std::string("USE (.*?);"));
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
+	my_exps.push_back(std::string("ON (.*?)(([ ]{1,})|;)"));
 	string::const_iterator start, end;
 	start = st.begin();
 	end = st.end();
@@ -1396,7 +1397,13 @@ std::string process_cql_cmd(string st, string prefix) {
 					std::string app( "FROM " + prefix + fields[1]);
 					replacements[str] = app; 
 				}
-			} else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
+			} else if(fields[0].compare(on) == 0){
+				found = fields[1].find('.');
+				if (found!=std::string::npos){
+                                std::string app( "ON " + prefix + fields[1]);
+                                replacements[str] = app;
+				}
+                        } else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
 				int n = fields.size();
 				std::string feed("");
 				int j = 0;
