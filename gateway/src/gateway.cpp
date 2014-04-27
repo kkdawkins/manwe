@@ -1335,6 +1335,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string schema("SCHEMA");
 	std::string table("TABLE");
 	std::string on("ON");
+	std::string to("TO");
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -1350,6 +1351,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("USER[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
+	my_exps.push_back(std::string("TO[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("ON (.*?)(([ ]{1,})|;)"));
@@ -1395,6 +1397,9 @@ std::string process_cql_cmd(string st, string prefix) {
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
 				replacements[str] = app;			
+			} else if(fields[0].compare(to) == 0){
+				std::string app( "TO " + prefix + fields[1]);
+				replacements[str] = app;
 			} else if(fields[0].compare(table) == 0){
 				found = fields[1].find('.');
 				if (found!=std::string::npos){
