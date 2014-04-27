@@ -972,7 +972,7 @@ void* HandleConnCassandra(void* td) {
                                 if(!scanForInternalToken(terminated_content, thread_data->token) || scanforRestrictedKeyspaces(terminated_content)){
                                     // False, so the internal token did not appear in the column data, must remove
                                     #if DEBUG
-                                    printf("%u:   Found a column that requires removal: %s.\n", (uint32_t)tid, colPtr->content);
+                                    printf("%u:   Found a column that requires removal: %s.\n", (uint32_t)tid, terminated_content);
                                     #endif
                                     rowPtr->remove = true;
                                     //rows_count --;
