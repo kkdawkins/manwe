@@ -1325,6 +1325,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string use("USE");
 	std::string from("FROM");
 	std::string keyspace("KEYSPACE");
+	std::string user("USER");
 	std::string into("INTO");
 	std::string update("UPDATE");
 	std::string schema("SCHEMA");
@@ -1344,6 +1345,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
+	my_exps.push_back(std::string("USER[\\s]+[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("ON (.*?)(([ ]{1,})|;)"));
@@ -1379,8 +1381,12 @@ std::string process_cql_cmd(string st, string prefix) {
                         }
 			int bx = fields.size();
 			std::string quote("\"");
+			std::string single("\'");
 			if ( custom_replace(fields[bx - 1], std::string("\""), std::string(""))){
 				prefix = quote + prefix; 
+			}
+			if ( custom_replace(fields[bx - 1], std::string("\'"), std::string(""))){
+				prefix = single + prefix; 
 			}
 			if(fields[0].compare(use) == 0){
 				std::string app( "USE " + prefix + fields[1]);
@@ -1404,6 +1410,16 @@ std::string process_cql_cmd(string st, string prefix) {
                                 replacements[str] = app;
 				}
                         } else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
+				int n = fields.size();
+				std::string feed("");
+				int j = 0;
+				fields[n - 1] = prefix + fields[n - 1];
+				while ( j < n ){
+					feed = feed + fields[j] + ((j == n - 1) ? "" : " ");
+					j++;
+				}
+				replacements[str] = feed;  
+			} else if (fields[0].compare(user) == 0 ){
 				int n = fields.size();
 				std::string feed("");
 				int j = 0;
