@@ -514,9 +514,9 @@ void* HandleConnClient(void* td) {
                 
             if (interestingPacket(cpp_string)) {
                 
-                //#if DEBUG
+                #if DEBUG
                 printf("%u:       Found interesting packet %d going to cassandra.\n", (uint32_t)tid, packet->stream);
-                //#endif
+                #endif
                     
                 node *interesting_packet = (node *)malloc(sizeof(node));
                 interesting_packet->id = packet->stream;
@@ -966,7 +966,10 @@ void* HandleConnCassandra(void* td) {
                         j = 0;
                         while(colPtr != NULL && j < metadata->columns_count){
                             if(isImportantColumn(colTypeMap->name)){
-                                if(!scanForInternalToken(colPtr->content, thread_data->token) || scanforRestrictedKeyspaces(colPtr->content)){
+                                char *terminated_content = (char *)malloc(colPtr->len + 1);
+                                memset(terminated_content, 0, colPtr->len + 1);
+                                memcpy(terminated_content, colPtr->content, colPtr->len);
+                                if(!scanForInternalToken(terminated_content, thread_data->token) || scanforRestrictedKeyspaces(terminated_content)){
                                     // False, so the internal token did not appear in the column data, must remove
                                     #if DEBUG
                                     printf("%u:   Found a column that requires removal: %s.\n", (uint32_t)tid, colPtr->content);
@@ -974,6 +977,7 @@ void* HandleConnCassandra(void* td) {
                                     rowPtr->remove = true;
                                     //rows_count --;
                                 }
+                                free(terminated_content);
                             }
                             colTypeMap = colTypeMap->next;
                             colPtr = colPtr->next_col;
@@ -1430,8 +1434,10 @@ std::string process_cql_cmd(string st, string prefix) {
 	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){	
 		found = traverser->second.find('.');
                         if (found!=std::string::npos){
+                                #if DEBUG
                                 cout << "Dot found" << endl;
-                               // custom_replace(traverser->second, dot, dot+prefix);
+                                #endif
+                                // custom_replace(traverser->second, dot, dot+prefix);
                         } 
 		custom_replace(st, traverser->first, traverser->second);
 	}
