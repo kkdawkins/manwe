@@ -1336,6 +1336,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string table("TABLE");
 	std::string on("ON");
 	std::string to("TO");
+	std::string stable = prefix;
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
 	std::map<std::string, std::string>::iterator traverser;
@@ -1446,10 +1447,11 @@ std::string process_cql_cmd(string st, string prefix) {
                                 replacements[str] = app;
                         }
 			start = what[0].second;
-			//flag = 0;
+			prefix = stable;
 		}
 		start = st.begin();
 		end = st.end();
+		prefix = stable;
 	}
 	//perform replacements on supplied query
 	for (traverser = replacements.begin(); traverser != replacements.end(); ++traverser){	
