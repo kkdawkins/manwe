@@ -1477,11 +1477,25 @@ bool custom_replace(std::string& str, const std::string& from, const std::string
 
 bool interestingPacket(std::string st){
     std::string sys("system");
-    std::size_t found = st.find(sys);
-    if (found == std::string::npos){
+    std::string permissions("permissions");
+    std::string users("users");
+    
+    
+    if(strMatch(st.find(sys), st)){
+        return true;
+    }else if(strMatch(st.find(permissions), st)){
+        return true;
+    }else if(strMatch(st.find(users), st)){
+        return true;
+    }else
+        return false;
+}
+
+bool strMatch(std::size_t match, std::string st){
+    if (match == std::string::npos){
         // The system was not found in the query
         return false;
-    }else if(st.at(found-1) == ' '){ // this is to prevent similar keyspaces (eg mysystem) from being caught)
+    }else if(st.at(match-1) == ' '){ // this is to prevent similar keyspaces (eg mysystem) from being caught)
         return true;
     }else
         return true;
