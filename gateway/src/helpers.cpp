@@ -595,12 +595,12 @@ bool scanforRestrictedKeyspaces(char *cellInQuestion){
     }
 }
 
-// TODO : verify that I am not missing any frees or Mathias will be mad!
 void free_row(cql_result_cell_t *row){
     cql_result_cell_t *curr;
     curr = row;
     while(curr != NULL){
         row = row->next_col;
+        free(curr->content);
         free(curr);
         curr = row;
     }
@@ -640,7 +640,7 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid){
     while(tmp != NULL){
         while(tmp != NULL && tmp->remove == true){
             curr_row->next_row = tmp->next_row;
-            free(tmp);
+            free_row(tmp);
             tmp = curr_row->next_row;
         }
         if(tmp == NULL){
