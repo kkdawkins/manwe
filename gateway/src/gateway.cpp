@@ -1480,6 +1480,7 @@ bool interestingPacket(std::string st){
     std::string permissions("permissions");
     std::string users("users");
     
+    boost::to_lower(st); // for case insensitivity
     
     if(strMatch(st.find(sys), st)){
         return true;
