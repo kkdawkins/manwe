@@ -901,7 +901,6 @@ void* HandleConnCassandra(void* td) {
 
             #if DEBUG
             printf("%u:   Handling RESULT packet from Cassandra.\n", (uint32_t)tid);
-            printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
             #endif
 
             int32_t result_type = 0;
@@ -937,16 +936,14 @@ void* HandleConnCassandra(void* td) {
 
                 // Get the actual result data
                 cql_result_cell_t *parsed_table = ReadCQLResults((char *)packet + offset, rows_count, metadata->columns_count);
-
-                // TODO - Kevin, filter rows here
                 
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the linked list
                 // An interesting packet was tagged on the way to Cassandra AND impacts a "private table"
-                bool isInterestingPacket = findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->table);
+                bool isInterestingPacket = findNode(thread_data->interestingPackets, packet->stream) && isImportantTable(metadata->keyspace, metadata->table);
                 thread_data->interestingPackets = removeNode(thread_data->interestingPackets, packet->stream);
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
                 
-                if (isInterestingPacket) { // TODO False for now, so Mathias can ignore/delete this code to be used later
+                if (isInterestingPacket) {
                     cql_result_cell_t *rowPtr = parsed_table;
                     cql_result_cell_t *colPtr = parsed_table;
                     cql_column_spec_t *colTypeMap = metadata->column;
@@ -979,6 +976,24 @@ void* HandleConnCassandra(void* td) {
                                 }
                                 free(terminated_content);
                             }
+
+                            if (strcmp(metadata->keyspace, "system_auth") == 0 && strcmp(metadata->table, "users") == 0 &&
+                                rowPtr->remove != true && strcmp(colTypeMap->name, "name") == 0) {
+                                // This is a user that is being returned which belongs to the tenant and thus needs the prefix token stripped
+
+                                memmove(colPtr->content, colPtr->content + TOKEN_LENGTH, colPtr->len - TOKEN_LENGTH);
+                                colPtr->len -= TOKEN_LENGTH;
+
+                                #if DEBUG
+                                char *terminated_content = (char *)malloc(colPtr->len + 1);
+                                memset(terminated_content, 0, colPtr->len + 1);
+                                memcpy(terminated_content, colPtr->content, colPtr->len);
+                                printf("%u:   Stripping prefix from tenant username: %s.\n", (uint32_t)tid, terminated_content);
+                                free(terminated_content);
+                                #endif
+                            }
+                            // FIXME also need to strip the token in more generic settings
+
                             colTypeMap = colTypeMap->next;
                             colPtr = colPtr->next_col;
                             j = j + 1;
@@ -996,7 +1011,11 @@ void* HandleConnCassandra(void* td) {
                     printf("Finished cleanup\n");
                     #endif
                 }
-                
+                else {
+                    #if DEBUG
+                    printf("%u:   Was not an interesting packet %d.\n", (uint32_t)tid, packet->stream);
+                    #endif
+                }                
             
                 uint32_t buf_len = 0;
                 char *new_rows = WriteCQLResults(parsed_table, &buf_len, &rows_count);

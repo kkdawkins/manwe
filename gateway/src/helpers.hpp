@@ -65,7 +65,7 @@ bool findNode(node *head, int8_t stream_id);
 bool scanForInternalToken(char *cellInQuestion, char *internalToken);
 bool scanforRestrictedKeyspaces(char *cellInQuestion);
 cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid);
-bool isImportantTable(char *tableName);
+bool isImportantTable(char *keyspace, char *tableName);
 bool isImportantColumn(char *name);
 
 #endif
