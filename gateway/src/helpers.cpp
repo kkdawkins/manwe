@@ -574,7 +574,7 @@ bool scanForInternalToken(char *cellInQuestion, char *internalToken){
     if (found == std::string::npos){
         // The user's token was not found in the cell data
         // Apparently there are some exceptions to this rule:
-        std::string system("system");
+        std::string system("system"); // FIXME must be case-insensitive equal of "system", "system_auth", or "system_traces"
         if(cell.find(system) != std::string::npos){
             return true;
         }
@@ -588,7 +588,7 @@ bool scanforRestrictedKeyspaces(char *cellInQuestion){
     std::string cell(cellInQuestion);
     std::string multiTennant("multitenantcassandra");
     std::size_t found = cell.find(multiTennant);
-    if(found == std::string::npos){
+    if(found == std::string::npos){ // FIXME must be case-insensitive equal, not just position match
         return false;
     }else{
         return true;
@@ -653,21 +653,30 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid){
     return parsed_table;
 }
 
-bool isImportantTable(char *tableName){
-    if(strcmp(tableName,"schema_keyspaces") == 0){
-        return true;
-    }else if(strcmp(tableName,"schema_columns") == 0){
-        return true;
-    }else{
-        return false;
+bool isImportantTable(char *keyspace, char *tableName){
+    if (strcmp(keyspace, "system") == 0) {
+        if(strcmp(tableName,"schema_keyspaces") == 0){
+            return true;
+        }else if(strcmp(tableName,"schema_columnfamilies") == 0){
+            return true;
+        }else if(strcmp(tableName,"schema_columns") == 0){
+            return true;
+        }
     }
+    else if (strcmp(keyspace, "system_auth") == 0) {
+        if(strcmp(tableName,"users") == 0){
+            return true;
+        }
+    }
+    return false;
 }
 
 bool isImportantColumn(char *name){
     if(strcmp(name,"keyspace_name") == 0){
         return true;
+    }else if(strcmp(name, "name") == 0){
+        return true;
     }else{
         return false;
     }
 }
-
