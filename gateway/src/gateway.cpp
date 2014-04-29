@@ -977,22 +977,24 @@ void* HandleConnCassandra(void* td) {
                                 free(terminated_content);
                             }
 
-                            if (strcmp(metadata->keyspace, "system_auth") == 0 && strcmp(metadata->table, "users") == 0 &&
-                                rowPtr->remove != true && strcmp(colTypeMap->name, "name") == 0) {
-                                // This is a user that is being returned which belongs to the tenant and thus needs the prefix token stripped
+                            if ((colTypeMap->type == 0x0001 || colTypeMap->type == 0x0009 || colTypeMap->type == 0x000A || colTypeMap->type == 0x000D) &&
+                                colPtr->len > TOKEN_LENGTH) {
+                                // This is a text-ish string that may need to have the internal token stripped from the front
+                                // Most strings seem to be varchars (0x000D)
 
-                                memmove(colPtr->content, colPtr->content + TOKEN_LENGTH, colPtr->len - TOKEN_LENGTH);
-                                colPtr->len -= TOKEN_LENGTH;
+                                if (strncmp(thread_data->token, colPtr->content, TOKEN_LENGTH) == 0) {
+                                    memmove(colPtr->content, colPtr->content + TOKEN_LENGTH, colPtr->len - TOKEN_LENGTH);
+                                    colPtr->len -= TOKEN_LENGTH;
 
-                                #if DEBUG
-                                char *terminated_content = (char *)malloc(colPtr->len + 1);
-                                memset(terminated_content, 0, colPtr->len + 1);
-                                memcpy(terminated_content, colPtr->content, colPtr->len);
-                                printf("%u:   Stripping prefix from tenant username: %s.\n", (uint32_t)tid, terminated_content);
-                                free(terminated_content);
-                                #endif
+                                    #if DEBUG
+                                    char *terminated_content = (char *)malloc(colPtr->len + 1);
+                                    memset(terminated_content, 0, colPtr->len + 1);
+                                    memcpy(terminated_content, colPtr->content, colPtr->len);
+                                    printf("%u:   Stripped prefix from content: %s.\n", (uint32_t)tid, terminated_content);
+                                    free(terminated_content);
+                                    #endif
+                                }
                             }
-                            // FIXME also need to strip the token in more generic settings
 
                             colTypeMap = colTypeMap->next;
                             colPtr = colPtr->next_col;

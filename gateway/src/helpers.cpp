@@ -663,8 +663,12 @@ bool isImportantTable(char *keyspace, char *tableName){
             return true;
         }
     }
-    else if (strcasecmp(keyspace, "system_auth") == 0) {
+    else if (strcasecmp(keyspace, "system_auth") == 0) { // These are the three default tables in the system_auth keyspace
         if(strcasecmp(tableName,"users") == 0){
+            return true;
+        }else if(strcasecmp(tableName,"credentials") == 0){
+            return true;
+        }else if(strcasecmp(tableName,"permissions") == 0){
             return true;
         }
     }
@@ -675,6 +679,8 @@ bool isImportantColumn(char *name){
     if(strcmp(name,"keyspace_name") == 0){
         return true;
     }else if(strcmp(name, "name") == 0){
+        return true;
+    }else if(strcmp(name, "username") == 0){
         return true;
     }else{
         return false;
