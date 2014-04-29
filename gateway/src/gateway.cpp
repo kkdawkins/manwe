@@ -1353,9 +1353,13 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string update("UPDATE");
 	std::string schema("SCHEMA");
 	std::string table("TABLE");
+	std::string truncate("TRUNCATE");
 	std::string on("ON");
 	std::string to("TO");
 	std::string of("OF");
+
+	//declare regex to match special case REVOKE
+	boost::regex revoke(std::string("REVOKE (.*)"), boost::regex_constants::icase);
 	std::string stable = prefix;
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
@@ -1376,6 +1380,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	my_exps.push_back(std::string("OF[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
+	my_exps.push_back(std::string("TRUNCATE (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("ON (.*?)(([ ]{1,})|;)"));
 	string::const_iterator start, end;
 	start = st.begin();
@@ -1434,7 +1439,7 @@ std::string process_cql_cmd(string st, string prefix) {
 				}
                         } else if (fields[0].compare(from) == 0 ){
 				found = fields[1].find('.');
-				if (found!=std::string::npos){
+				if (found!=std::string::npos || boost::regex_match(st, revoke)){
 					std::string app( "FROM " + prefix + fields[1]);
 					replacements[str] = app; 
 				}
@@ -1444,7 +1449,12 @@ std::string process_cql_cmd(string st, string prefix) {
                                 std::string app( "ON " + prefix + fields[1]);
                                 replacements[str] = app;
 				}
-                        } else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
+                        } else if (fields[0].compare(truncate) == 0 ){
+				found = fields[1].find('.');
+				if (found!=std::string::npos){
+					std::string app( "TRUNCATE " + prefix + fields[1]);
+					replacements[str] = app; }
+			} else if (fields[0].compare(keyspace) == 0 || fields[0].compare(schema) == 0){
 				int n = fields.size();
 				std::string feed("");
 				int j = 0;
