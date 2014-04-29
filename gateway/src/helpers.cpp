@@ -666,6 +666,8 @@ bool isImportantTable(char *keyspace, char *tableName){
     else if (strcasecmp(keyspace, "system_auth") == 0) {
         if(strcasecmp(tableName,"users") == 0){
             return true;
+        }else if(strcasecmp(tableName,"credentials") == 0){
+            return true;
         }
     }
     return false;
@@ -675,6 +677,8 @@ bool isImportantColumn(char *name){
     if(strcmp(name,"keyspace_name") == 0){
         return true;
     }else if(strcmp(name, "name") == 0){
+        return true;
+    }else if(strcmp(name, "username") == 0){
         return true;
     }else{
         return false;
