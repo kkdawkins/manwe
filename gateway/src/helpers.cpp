@@ -654,17 +654,17 @@ cql_result_cell_t *cleanup(cql_result_cell_t *parsed_table, uint32_t tid){
 }
 
 bool isImportantTable(char *keyspace, char *tableName){
-    if (strcmp(keyspace, "system") == 0) {
-        if(strcmp(tableName,"schema_keyspaces") == 0){
+    if (strcasecmp(keyspace, "system") == 0) {
+        if(strcasecmp(tableName,"schema_keyspaces") == 0){
             return true;
-        }else if(strcmp(tableName,"schema_columnfamilies") == 0){
+        }else if(strcasecmp(tableName,"schema_columnfamilies") == 0){
             return true;
-        }else if(strcmp(tableName,"schema_columns") == 0){
+        }else if(strcasecmp(tableName,"schema_columns") == 0){
             return true;
         }
     }
-    else if (strcmp(keyspace, "system_auth") == 0) {
-        if(strcmp(tableName,"users") == 0){
+    else if (strcasecmp(keyspace, "system_auth") == 0) {
+        if(strcasecmp(tableName,"users") == 0){
             return true;
         }
     }
