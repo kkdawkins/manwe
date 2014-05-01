@@ -627,6 +627,8 @@ void* HandleConnClient(void* td) {
 
             // After checking the prepared id, we can ignore the rest of the packet, since it's just data being sent to Cassandra
 
+            free(prepared_id);
+
             #if DEBUG
             printf("%u:   Finished with EXECUTE, passing to Cassandra.\n", (uint32_t)tid);
             #endif
@@ -1533,8 +1535,12 @@ bool strMatch(std::size_t match, std::string st){
     if (match == std::string::npos){
         // The system was not found in the query
         return false;
-    }else if(st.at(match-1) == ' '){ // this is to prevent similar keyspaces (eg mysystem) from being caught)
+    }
+    (void)st; // Since commenting out below logic, still need to use this variable
+    return true;
+
+    /*else if(st.at(match-1) == ' '){ // this is to prevent similar keyspaces (eg mysystem) from being caught)
         return true;
     }else
-        return true;
+        return true;*/
 }
