@@ -1,4 +1,4 @@
-from core.models import User, Service, SingletonModel
+from core.models import PlCoreBase, Service, SingletonModel, User
 from django.db import models
 
 class CassandraService(SingletonModel, Service):
@@ -11,7 +11,10 @@ class CassandraService(SingletonModel, Service):
     def __unicode__(self):
         return u"%s" % self.name
 
-class CassandraTenant(models.Model):
+class CassandraTenant(PlCoreBase):
+
+    class Meta:
+        app_label = "cassandra"
 
     cassandra_service = models.ForeignKey(CassandraService)
     user = models.ForeignKey(User)

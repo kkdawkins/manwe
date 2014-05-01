@@ -15,5 +15,7 @@ class CassandraTenantAdmin(SingletonAdmin):
     verbose_name = "Cassandra Tenant"
     verbose_name_plural = "Cassandra Tenant"
 
+    fieldsets = [(None, {'fields': ['cassandra_service', 'user', 'comment']})]
+
 admin.site.register(CassandraService, CassandraServiceAdmin)
 admin.site.register(CassandraTenant, CassandraTenantAdmin)
