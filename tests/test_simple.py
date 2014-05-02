@@ -3,7 +3,7 @@
 from cassandra.cluster import Cluster
 
 def ap(ip):
-    return {'username': '87bd49810901a0bfb303cassandra', 'password': 'cassandra'}
+    return {'username': 'cassandra', 'password': 'cassandra'}
 
 def main():
     cluster = Cluster(['127.0.0.1'], compression=False, auth_provider=ap)

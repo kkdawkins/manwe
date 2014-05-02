@@ -841,11 +841,7 @@ void* HandleConnCassandra(void* td) {
                 printf("%u:       Keyspace is '%s'.\n", (uint32_t)tid, ks);
                 #endif
 
-                char *new_ks = (char *)malloc(strlen(ks) - TOKEN_LENGTH + 1);
-                memset(new_ks, 0, strlen(ks) - TOKEN_LENGTH + 1);
-                memcpy(new_ks, ks + TOKEN_LENGTH, strlen(ks) - TOKEN_LENGTH);
-                free(ks);
-                ks = new_ks;
+                memmove(ks, ks + TOKEN_LENGTH, strlen(ks) - TOKEN_LENGTH + 1);
                 str_len -= TOKEN_LENGTH;
 
                 #if DEBUG
@@ -1043,28 +1039,29 @@ void* HandleConnCassandra(void* td) {
                 printf("%u:     It is a SET_KEYSPACE result.\n", (uint32_t)tid);
                 #endif
 
+                uint32_t offset = header_len + 4;
+
                 uint16_t str_len = 0;
-                memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                memcpy(&str_len, (char *)packet + offset, 2);
+                offset += 2;
                 str_len = ntohs(str_len);
 
                 char *str = (char *)malloc(str_len + 1);
                 memset(str, 0, str_len + 1);
-                memcpy(str, (char *)packet + header_len + 6, str_len);
+                memcpy(str, (char *)packet + offset, str_len);
+                offset += str_len;
 
                 #if DEBUG
                 printf("%u:       Before: '%s'.\n", (uint32_t)tid, str);
                 #endif
 
-                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
+                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before reading the token
                 if (strncmp(thread_data->token, str, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
-                    char *new_str = (char *)malloc(strlen(str) - TOKEN_LENGTH + 1);
-                    memset(new_str, 0, strlen(str) - TOKEN_LENGTH + 1);
-                    memcpy(new_str, str + TOKEN_LENGTH, strlen(str) - TOKEN_LENGTH);
-                    free(str);
-                    str = new_str;
+                    memmove(str, str + TOKEN_LENGTH, strlen(str) - TOKEN_LENGTH + 1);
                 }
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
 
+                // Write changes back to packet
                 str_len = strlen(str);
                 str_len = htons(str_len);
                 memcpy((char *)packet + header_len + 4, &str_len, 2);
@@ -1112,39 +1109,43 @@ void* HandleConnCassandra(void* td) {
                 printf("%u:     It is a SCHEMA_CHANGE result.\n", (uint32_t)tid);
                 #endif
 
+                uint32_t offset = header_len + 4;
+
                 uint16_t str_len = 0;
-                memcpy(&str_len, (char *)packet + header_len + 4, 2);
+                memcpy(&str_len, (char *)packet + offset, 2);
                 str_len = ntohs(str_len);
+                offset += 2;
 
                 char *change = (char *)malloc(str_len + 1);
                 memset(change, 0, str_len + 1);
-                memcpy(change, (char *)packet + header_len + 6, str_len);
+                memcpy(change, (char *)packet + offset, str_len);
+                offset += str_len;
 
-                memcpy(&str_len, (char *)packet + header_len + 6 + strlen(change), 2);
+                memcpy(&str_len, (char *)packet + offset, 2);
                 str_len = ntohs(str_len);
+                offset += 2;
 
                 char *keyspace = (char *)malloc(str_len + 1);
                 memset(keyspace, 0, str_len + 1);
-                memcpy(keyspace, (char *)packet + header_len + 8 + strlen(change), str_len);
+                memcpy(keyspace, (char *)packet + offset, str_len);
+                offset += str_len;
 
-                memcpy(&str_len, (char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), 2);
+                memcpy(&str_len, (char *)packet + offset, 2);
                 str_len = ntohs(str_len);
+                offset += 2;
 
                 char *table = (char *)malloc(str_len + 1);
                 memset(table, 0, str_len + 1);
-                memcpy(table, (char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), str_len);
+                memcpy(table, (char *)packet + offset, str_len);
+                offset += str_len;
 
                 #if DEBUG
                 printf("%u:       Before: %s '%s'.'%s'.\n", (uint32_t)tid, change, keyspace, table);
                 #endif
 
-                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
+                pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before reading the token
                 if (strncmp(thread_data->token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token
-                    char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
-                    memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
-                    memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
-                    free(keyspace);
-                    keyspace = new_keyspace;
+                    memmove(keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH + 1);
                 }
                 pthread_mutex_unlock(&thread_data->mutex); // Release mutex
 
@@ -1153,15 +1154,17 @@ void* HandleConnCassandra(void* td) {
                 #endif
 
                 // Since we are stripping data from the strings, we don't have to worry about overflowing the packet buffer
+                offset = header_len + 6 + strlen(change);
                 str_len = strlen(keyspace);
                 str_len = htons(str_len);
-                memcpy((char *)packet + header_len + 6 + strlen(change), &str_len, 2);
-                memcpy((char *)packet + header_len + 8 + strlen(change), keyspace, strlen(keyspace));
+                memcpy((char *)packet + offset, &str_len, 2);
+                memcpy((char *)packet + offset + 2, keyspace, strlen(keyspace));
+                offset += 2 + strlen(keyspace);
 
                 str_len = strlen(table);
                 str_len = htons(str_len);
-                memcpy((char *)packet + header_len + 8 + strlen(change) + strlen(keyspace), &str_len, 2);
-                memcpy((char *)packet + header_len + 10 + strlen(change) + strlen(keyspace), table, strlen(table));
+                memcpy((char *)packet + offset, &str_len, 2);
+                memcpy((char *)packet + offset + 2, table, strlen(table));
 
                 packet->length = 10 + strlen(change) + strlen(keyspace) + strlen(table);
                 packet->length = htonl(packet->length);
@@ -1231,11 +1234,7 @@ void* HandleConnCassandra(void* td) {
 
                 pthread_mutex_lock(&thread_data->mutex); // Acquire the mutex before changing the token
                 if (strncmp(thread_data->token, keyspace, TOKEN_LENGTH) == 0) { // keyspace begins with the internal token, so strip and forward packet to client
-                    char *new_keyspace = (char *)malloc(strlen(keyspace) - TOKEN_LENGTH + 1);
-                    memset(new_keyspace, 0, strlen(keyspace) - TOKEN_LENGTH + 1);
-                    memcpy(new_keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH);
-                    free(keyspace);
-                    keyspace = new_keyspace;
+                    memmove(keyspace, keyspace + TOKEN_LENGTH, strlen(keyspace) - TOKEN_LENGTH + 1);
                 }
                 else { // keyspace is not tenant's -- drop packet
                     #if DEBUG

@@ -81,7 +81,8 @@ demo(
     {
 		boost::shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
 		builder->with_log_callback(&log_callback);
-        builder->add_contact_point(boost::asio::ip::address::from_string(host));
+		builder->add_contact_point(boost::asio::ip::address::from_string(host));
+		builder->with_credentials("12345678901234567890cassandra", "cassandra");
 
 		if (use_ssl) {
 			builder->with_ssl();

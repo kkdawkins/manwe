@@ -28,7 +28,7 @@ main(int argc, char**)
     // listening at default port (9042).
     shared_ptr<cql::cql_builder_t> builder = cql::cql_cluster_t::builder();
     builder->add_contact_point(boost::asio::ip::address::from_string("127.0.0.1"));
-    builder->with_credentials("1234567890123456789012345678901234567890cassandra", "cassandra");
+    builder->with_credentials("12345678901234567890cassandra", "cassandra");
     //builder->with_ssl();
     builder->with_log_callback(&log_callback); //for logging of activities 
 

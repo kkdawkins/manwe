@@ -16,6 +16,8 @@
 #              that 'foo' for tenant 1 is different than 'foo' for tenant 2.
 #              Also, test cases are run alphabetically, so if you need to run in a certain order, make sure the function
 #              names are in that order.
+#              If a test fails, there might be leftover keyspaces or tables that weren't properly cleaned up. This may cause
+#              subsequent tests to fail!
 
 import unittest
 
@@ -143,6 +145,38 @@ class TestCassandraQueries(unittest.TestCase):
         self._session.execute("DROP KEYSPACE test2;")
         self._session.execute("DROP KEYSPACE test3;")
         self._session.execute("DROP KEYSPACE test4;")
+
+    def test_query_CREATE_KEYSPACE_metadata(self):
+        ########## Test 'CREATE KEYSPACE' command metadata ##########
+
+        self._session.execute("CREATE KEYSPACE test1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+
+        # Make sure we get back expected metadata (observed from gateway logs)
+        rows = self._session.execute("SELECT * FROM system.schema_keyspaces WHERE keyspace_name = 'test1';")
+        self.assertEqual(len(rows), 1)
+
+        # These next two queries don't return anything when run directly against Cassandra (no tables or data yet), but they should still be rewritten
+        rows = self._session.execute("SELECT * FROM system.schema_columnfamilies WHERE keyspace_name ='test1';")
+        self.assertEqual(len(rows), 0)
+
+        rows = self._session.execute("SELECT * FROM system.schema_columns WHERE keyspace_name = 'test1';")
+        self.assertEqual(len(rows), 0)
+
+        self._session.execute("DROP KEYSPACE test1;")
+
+        # Make sure we can't snoop other keyspaces
+        rows = self._session.execute("SELECT * FROM system.schema_keyspaces WHERE keyspace_name = 'multitenantcassandra';")
+        self.assertEqual(len(rows), 0)
+
+        # But make sure the default system keyspaces are available
+        rows = self._session.execute("SELECT * FROM system.schema_keyspaces WHERE keyspace_name = 'system';")
+        self.assertEqual(len(rows), 1)
+
+        rows = self._session.execute("SELECT * FROM system.schema_columnfamilies WHERE keyspace_name ='system_auth';")
+        self.assertEqual(len(rows), 3)
+
+        rows = self._session.execute("SELECT * FROM system.schema_columns WHERE keyspace_name = 'system_traces';")
+        self.assertEqual(len(rows), 12)
 
     def test_query_USE(self):
         ########## Test 'USE' command ##########

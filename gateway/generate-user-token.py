@@ -1,5 +1,10 @@
 #!/usr/bin/python2
 
+#
+# This script manualy creates a new tenant for the Cassandra service. Alternatively, there is also integration for OpenCloud that will
+# automatically create Cassandra services and their tennants via web GUI. (OpenCloud code is still WIP, and not yet complete.)
+#
+
 import datetime
 import random
 
