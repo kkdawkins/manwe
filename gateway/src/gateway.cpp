@@ -1349,6 +1349,7 @@ using namespace std;
 std::string process_cql_cmd(string st, string prefix) {
 	std::string use("USE");
 	std::string from("FROM");
+	std::string equal("=");
 	std::string keyspace("KEYSPACE");
 	std::string user("USER");
 	std::string into("INTO");
@@ -1362,6 +1363,7 @@ std::string process_cql_cmd(string st, string prefix) {
 
 	//declare regex to match special case REVOKE
 	boost::regex revoke(std::string("REVOKE (.*)"), boost::regex_constants::icase);
+	boost::regex special_case(std::string("SELECT (.*) system.schema(.*)"), boost::regex_constants::icase);	
 	std::string stable = prefix;
 	//initialize map of replacements
 	std::map<std::string, std::string> replacements;
@@ -1376,6 +1378,7 @@ std::string process_cql_cmd(string st, string prefix) {
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
+	my_exps.push_back(std::string("=[\\s]*[A-Za-z0-9\']+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("USER[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("TO[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
@@ -1432,6 +1435,10 @@ std::string process_cql_cmd(string st, string prefix) {
 			} else if(fields[0].compare(of) == 0){
 				
 				std::string app( "OF " + prefix + fields[1]);
+				replacements[str] = app;
+			} else if(fields[0].compare(equal) == 0 && boost::regex_match(st, special_case)){
+				
+				std::string app( "= " + prefix + fields[1]);
 				replacements[str] = app;
 			} else if(fields[0].compare(table) == 0){
 				found = fields[1].find('.');
