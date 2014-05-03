@@ -1405,6 +1405,8 @@ std::string process_cql_cmd(string st, string prefix) {
 			vector <string> fields;
 			std::string holder("");
 			boost::split_regex( fields, str, boost::regex( "[\\s]{1,}" ) );
+			int bx = fields.size();
+			if (bx < 2) break;
 			holder = fields[1];
 			boost::to_lower(holder);
 			boost::to_upper(fields[0]);
@@ -1418,7 +1420,7 @@ std::string process_cql_cmd(string st, string prefix) {
                                 start = what[0].second;
 				continue;
                         }
-			int bx = fields.size();
+			
 			std::string quote("\"");
 			std::string single("\'");
 			if ( custom_replace(fields[bx - 1], std::string("\""), std::string(""))){
