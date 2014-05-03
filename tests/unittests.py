@@ -228,7 +228,7 @@ class TestCassandraQueries(unittest.TestCase):
 
     def test_ALTER_KEYSPACE_TABLE(self):
 	## You cannot change the name of the keyspace ##
-	#self._session.execute("DROP KEYSPACE test;")
+	
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
 	self._session.execute("ALTER KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 3};")
 
@@ -346,9 +346,8 @@ class TestCassandraQueries(unittest.TestCase):
 	self._session.execute("DROP KEYSPACE test2;")
 
 
-    def test_AABATCH(self):
-	#self._session.execute("DROP KEYSPACE test1;")
-	self._session.execute("DROP KEYSPACE test;")
+    def test_BATCH(self):
+	
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
 	self._session.execute("CREATE TABLE test.users (userID varchar PRIMARY KEY,password varchar,name varchar);")
 	self._session.execute("BEGIN BATCH INSERT INTO test.users (userID, password, name) VALUES ('user2', 'ch@ngem3b', 'second user') UPDATE test.users SET password = 'ps22dhds' WHERE userID = 'user2' INSERT INTO test.users (userID, password) VALUES ('user3', 'ch@ngem3c') DELETE name FROM test.users WHERE userID = 'user2' INSERT INTO test.users (userID, password, name) VALUES ('user4', 'ch@ngem3c', 'Andrew') APPLY BATCH;");
@@ -363,7 +362,7 @@ class TestCassandraQueries(unittest.TestCase):
 
 
     def test_CREATE_INSERT_TABLE(self):
-	#self._session.execute("DROP KEYSPACE test;")
+	
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
 
 	self._session.execute("CREATE TABLE test.users (user_name varchar PRIMARY KEY,password varchar,gender varchar,session_token varchar,state varchar,birth_year bigint);")
