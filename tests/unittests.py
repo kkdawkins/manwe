@@ -346,6 +346,22 @@ class TestCassandraQueries(unittest.TestCase):
 	self._session.execute("DROP KEYSPACE test2;")
 
 
+    def test_AABATCH(self):
+	#self._session.execute("DROP KEYSPACE test1;")
+	self._session.execute("DROP KEYSPACE test;")
+	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
+	self._session.execute("CREATE TABLE test.users (userID varchar PRIMARY KEY,password varchar,name varchar);")
+	self._session.execute("BEGIN BATCH INSERT INTO test.users (userID, password, name) VALUES ('user2', 'ch@ngem3b', 'second user') UPDATE test.users SET password = 'ps22dhds' WHERE userID = 'user2' INSERT INTO test.users (userID, password) VALUES ('user3', 'ch@ngem3c') DELETE name FROM test.users WHERE userID = 'user2' INSERT INTO test.users (userID, password, name) VALUES ('user4', 'ch@ngem3c', 'Andrew') APPLY BATCH;");
+
+
+	self._session.execute("CREATE TABLE test.users1 (userID uuid,fname text,lname text,email text,address text,zip int,state text,PRIMARY KEY ((userID, fname), state));");
+ 	self._session.execute("CREATE INDEX user_state ON test.users1 (state);");
+        self._session.execute("CREATE INDEX ON test.users1 (fname);");
+	self._session.execute("DROP KEYSPACE test;")
+
+
+
+
     def test_CREATE_INSERT_TABLE(self):
 	#self._session.execute("DROP KEYSPACE test;")
 	self._session.execute("CREATE KEYSPACE test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 1};")
