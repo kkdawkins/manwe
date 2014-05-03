@@ -1,0 +1,22 @@
+This directory contains code to integrate the Cassandra service into OpenCloud
+(http://www.opencloud.us/).
+
+To enable in OpenCloud, copy the cassandra folder into your OpenCloud root
+directory, which defaults to "/opt/planetstack". Then, edit
+"<root>/planetstack/settings.py" and add the Cassandra service to "INSTALLED_APPS"
+and "", like so:
+
+> INSTALLED_APPS = (
+>     ....
+>     'cassandra',
+> )
+> 
+> ....
+> 
+> SUIT_CONFIG = {
+>     ....
+>     'MENU': (
+>         ....
+>         {'label': 'Cassandra', 'icon':'icon-cog', 'app': 'cassandra'},
+>     )
+> }

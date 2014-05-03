@@ -241,28 +241,3 @@ bool checkToken(char *inToken, char *internalToken, bool use_ssl){
         return false;
     }
 }
-
-/*
-* To be called whenever a new cassandra instance is created
-* 
-*/
-bool initCassandraInstance(){
-	return false;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
