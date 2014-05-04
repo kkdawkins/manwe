@@ -1377,7 +1377,8 @@ std::string process_cql_cmd(string st, string prefix) {
 	std::string sys("system");
 	//push various regular expressions
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
-	my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
+	//my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
+	my_exps.push_back(std::string("INTO[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("=[\\s]*[A-Za-z0-9\']+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
@@ -1509,7 +1510,7 @@ std::string process_cql_cmd(string st, string prefix) {
                                 #endif
                                 // custom_replace(traverser->second, dot, dot+prefix);
                         } 
-		custom_replace(st, traverser->first, traverser->second);
+		find_and_replace(st, traverser->first, traverser->second);
 	}
 	return st;
 }
@@ -1520,6 +1521,15 @@ bool custom_replace(std::string& str, const std::string& from, const std::string
 		return false;
 	str.replace(start_pos, from.length(), to);
 	return true;
+}
+
+void find_and_replace(std::string& source, std::string const& find, std::string const& replace)
+{
+    for(std::string::size_type i = 0; (i = source.find(find, i)) != std::string::npos;)
+    {
+        source.replace(i, find.length(), replace);
+        i += replace.length() - find.length() + 1;
+    }
 }
 
 bool interestingPacket(std::string st){

@@ -133,6 +133,7 @@ void* HandleConnClient(void* td);
 void* HandleConnCassandra(void* td);
 std::string process_cql_cmd(std::string st, std::string prefix);
 bool custom_replace(std::string& str, const std::string& from, const std::string& to);
+void find_and_replace(std::string& source, std::string const& find, std::string const& replace);
 bool interestingPacket(std::string st);
 bool strMatch(std::size_t match, std::string st);
 #endif
