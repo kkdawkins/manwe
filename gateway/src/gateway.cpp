@@ -1378,12 +1378,12 @@ std::string process_cql_cmd(string st, string prefix) {
 	//push various regular expressions
 	my_exps.push_back(std::string("FROM (.*?)(([ ]{1,})|;)"));
 	//my_exps.push_back(std::string("INTO (.*?)[ ]{1,}"));
-	my_exps.push_back(std::string("INTO[\\s]+[A-Za-z0-9\"]+(;)*"));
+	my_exps.push_back(std::string("INTO[\\s]+[A-Za-z0-9\"]+(\\.[A-Za-z0-9\"]+)*([\\s]+|;)*"));
 	my_exps.push_back(std::string("USE[\\s]+[A-Za-z0-9\"]+(;)*"));
 	my_exps.push_back(std::string("=[\\s]*[A-Za-z0-9\']+(;)*"));
 	my_exps.push_back(std::string("(KEYSPACE|SCHEMA) (IF NOT EXISTS )*[A-Za-z0-9]+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("USER[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
-	my_exps.push_back(std::string("TO[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
+	my_exps.push_back(std::string(" TO[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("OF[\\s]+[A-Za-z0-9\']+(([ ]{1,})|;)"));
 	my_exps.push_back(std::string("UPDATE (.*?)[ ]{1,}"));
 	my_exps.push_back(std::string("TABLE (.*?)(([ ]{1,})|;)"));
@@ -1488,8 +1488,11 @@ std::string process_cql_cmd(string st, string prefix) {
 				}
 				replacements[str] = feed;  
 			} else if(fields[0].compare(into) == 0 ) {
-                                std::string app( "INTO " + prefix + fields[1]);
-                                replacements[str] = app;
+				found = fields[1].find('.');
+				if (found!=std::string::npos){
+                                	std::string app( "INTO " + prefix + fields[1]);
+                                	replacements[str] = app;
+				}
                         } else if(fields[0].compare(update) == 0 ){
                                 std::string app( "UPDATE " + prefix + fields[1]);
                                 replacements[str] = app;
