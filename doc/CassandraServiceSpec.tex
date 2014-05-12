@@ -68,8 +68,8 @@ Once authenticated, the Cassandra Service will generate a random prefix key, cur
 
 To enforce the use of the public token when connecting to the Service, Cassandra-based authentication will be required. This is similar to other databases when instance or database-specific users can be created independently of anything outside of the instance.
 
-\section*{Using The Service}
-\addcontentsline{toc}{section}{Using The Service}
+\section*{Using the Service}
+\addcontentsline{toc}{section}{Using the Service}
 
 The tenant (or anyone else who is given a token for an instance) will connect as normal using existing client libraries. The only change will be that instead of supplying just the username and password, the username will be prefixed with the token. This allows us to maintain compatibility with existing code, properly select the correct instance of Cassandra and enforce that only authorized users can connect to the instance. It is a reasonable assumption that the username and password will have to be changed anyways when a client's code is run on a new cloud platform, so prefixing the username with a token shouldn't be an inconvenience for the tenant.
 
@@ -95,8 +95,8 @@ def main():
 This section describes some of the decisions and selected approaches concerning how we implemented our Service. We list primarily what we achieved in this section; items not completed by the end of the semester are discussed in a following section.
 
 
-\section*{Achieving multi-tenancy}
-\addcontentsline{toc}{section}{Achieving multi-tenancy}
+\section*{Achieving Multi-Tenancy}
+\addcontentsline{toc}{section}{Achieving Multi-Tenancy}
 
 The project utilizes Cassandra's notion of the keyspace to provide multi-tenancy to the user. Keyspaces are similar to that of a ``schema'' in a relational database. Inside of a keyspace, tables can be created to store the data. This provides a natural way to isolate users, by utilizing keyspaces.
 
@@ -106,7 +106,7 @@ Our service prefixes the token on the desired name of the keyspace that the user
 
 There are also situations where it is advantageous to have multiple users accessing the same keyspace. An example of this is a website that has one user which can modify and one user which can only read. To attain this, we use a combination of the token based multi-tenancy described above and the power of Cassandra's built-in user system. 
 
-When the user decides to make sub users, they will run the `create user' command against the cluster. The gateway prefixes the username with the internal token and passes the command to Cassandra. At this point, Cassandra becomes aware of this new user and the permissions attached to it. After this process is complete, whenever the sub user decides to access the keyspaces, the access control (read/write permissions) is handled by Cassandra while access itself is handled by the gateway. 
+When the user decides to make sub users, they will run the \texttt{CREATE USER} command against the cluster. The gateway prefixes the username with the internal token and passes the command to Cassandra. At this point, Cassandra becomes aware of this new user within the tenant's instance and the permissions attached to it. After this process is complete, whenever the sub user decides to access the keyspaces, the access control (read/write permissions) is handled by Cassandra while access itself is handled by the gateway. 
 
 This style of control pushes the access control down to Cassandra rather than try to manage it at the gateway level. Cassandra is much more optimized to handle this and this reduces any lag time associated with the gateway needing to manage permissions. 
 
@@ -134,8 +134,8 @@ The chief service controller was planned be the OpenCloud Django framework. Duri
 We also worked on implementing a secondary service controller outside of OpenCloud using Nagios as a monitoring tool. Nagios would communicate alerts to our Cassandra service in the case that usage exceeded or fell below certain thresholds. This controller would then change state in OpenCloud to cause the Service to respond appropriately. In the former case, a new VM would be spun up from within the cluster; in the latter, we would shut down one VM at a time and redistribute its load to remaining VMs. This way, we utilize resources in an optimal manner. In the end, we had some skeleton code to achieve Nagios integration but full functionality was not realized.
 
 
-\section*{Distributing The Load}
-\addcontentsline{toc}{section}{Distributing The Load}
+\section*{Distributing the Load}
+\addcontentsline{toc}{section}{Distributing the Load}
 
 Each Cassandra node has an instance of the gateway running on it. Cassandra by design allows any data to be accessed from any node and automatically distributes data among nodes to provide built in scaling. Utilizing these facts, we can provide Request Router with the different IPs of our Cassandra nodes running in a slice and let it pick the least loaded node for a client's initial connection.
 
@@ -147,7 +147,7 @@ The behavior of Cassandra by itself is very well suited to distribute load, both
 \chapter*{Testing and Validation}
 \addcontentsline{toc}{chapter}{Testing and Validation}
 
-Since we have claimed that our implementation of the gateway would be 100$\%$ compatible with existing CQL implementations, it was very important to make sure the expected behavior of the gateway matched the observed behavior. We used a series of unit tests for each type of command as well as some individual test scripts to perform this validation.
+Since we have claimed that our implementation of the gateway would be 100\% compatible with existing CQL implementations, it was very important to make sure the expected behavior of the gateway matched the observed behavior. We used a series of unit tests for each type of command as well as some individual test scripts to perform this validation.
 
 The primary languages we used for testing were C/C++ and Python. The Cassandra drivers for these languages have been verified to work correctly with the gateway. There is also a Java driver, but we have not yet tested with it. The Nagios team attempted to use the Java driver and were unsuccessful, but we are not sure if it was a problem on our end or theirs.
 
@@ -166,8 +166,8 @@ Additionally, we noticed a handful of queries to system metadata that drivers ma
 A tenant exploiting information leaks will be limited to general information like the names of tables or keyspaces, but will be unable to actually query or update data that does not belong to them. This is because any such command will be prefixed with the tenant's own token, so even knowing the name of another tenant's keyspace will not allow anyone else to access it.
 
 
-\section*{Actual use of the Cassandra Service}
-\addcontentsline{toc}{section}{Actual use of the Cassandra Service}
+\section*{Actual Use of the Cassandra Service}
+\addcontentsline{toc}{section}{Actual Use of the Cassandra Service}
 
 We were hoping to provide our Service to other teams to make use of, however this didn't actually happen for a couple of reasons. First, the local Arizona OpenCloud nodes took longer to configure and be ready to use than expected. Second, existing projects that utilize Cassandra, like KairosDB, still use the deprecated ``Thrift'' protocol instead of the newer CQL protocol. Because of this, those programs couldn't use the gateway or our Service.
 
@@ -188,7 +188,7 @@ Some optional features of the CQL spec, such as compression of packets and SSL s
 
 According to the CQL spec, prepared statements will return a unique uid (uuid) that the client then specifies along with parameters when subsequently executing the command. This uuid is globally unique, and this implies that if one tenant manages to guess another tenant's prepared statement uuid they could execute a prepared statement that does not belong to them. This could allow leaking of information and/or inserting or deleting data that a tenant does not have access to.
 
-This can be mitigated by having each gateway keeping track of which tenant creates a prepared statement and then when attempting to execute a prepared statement enforcing that only the creator tenant can do so. Any other tenant will receive an error and be unable to use a uuid they don't own.
+This can be mitigated by having each gateway using global state via a table in Cassandra to keep track of which tenant creates a prepared statement and then when attempting to execute a prepared statement enforcing that only the creator tenant can do so. Any other tenant will receive an error and be unable to use a uuid they don't own.
 
 
 \section*{Keyspace Length Limits}
@@ -196,7 +196,7 @@ This can be mitigated by having each gateway keeping track of which tenant creat
 
 Internally, Cassandra limits keyspace names to 48 characters. Since we are prefixing each keyspace with a tenant's internal token, this can lead to long keyspace names that normally work suddenly failing when run through the gateway. Short keyspaces will be unaffected. Currently, this limit is 48 - 20 = 28 characters before keyspace creation will fail.
 
-We can work around this limitation either by extending Cassandra's limitation (not sure if this is hardcoded or a limitation of the internal data representation), or by hashing the token prefix plus supplied keyspace like so: sha1sum(<token> + lowerCase(keyspace)). The second approach would require a secondary table in the multitenantcassandra keyspace to map between hashed keyspace names used internally and the human readable names expected by the end user. This would add a small overhead, but each gateway could cache mappings as needed in RAM to minimize it.
+We can work around this limitation either by extending Cassandra's limitation (not sure if this is hardcoded or a limitation of the internal data representation), or by hashing the token prefix plus supplied keyspace like so: sha1sum($<$token$>$ + lowerCase(keyspace)). The second approach would require a secondary table in the multitenantcassandra keyspace to map between hashed keyspace names used internally and the human readable names expected by the end user. This would add a small overhead, but each gateway could cache mappings as needed in RAM to minimize it.
 
 
 \section*{Accounting}
