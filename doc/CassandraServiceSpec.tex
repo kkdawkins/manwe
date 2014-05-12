@@ -7,6 +7,11 @@
 \usepackage{fullpage}
 \usepackage[nottoc]{tocbibind}
 
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd{\chapter}{\if@openright\cleardoublepage\else\clearpage\fi}{}{}{}
+\makeatother
+
 \begin{document}
 
 \setcounter{tocdepth}{4}
@@ -38,8 +43,11 @@ The Cassandra Service will provide multi-tenancy in a transparent manner to end 
 The Service will support Cassandra 2.x and the CQL binary protocol, version 1. Previous versions of Cassandra and the deprecated legacy ``Thrift'' protocol are not supported.
 \end{abstract}
 
+\newpage
 
 \tableofcontents
+
+\newpage
 
 \chapter*{Code}
 \addcontentsline{toc}{chapter}{Code}
