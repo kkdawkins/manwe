@@ -38,7 +38,7 @@ Tucson, Arizona}
 \begin{abstract}
 Cassandra is a highly scalable, fault-tolerant NoSQL database.
 
-The Cassandra Service will provide multi-tenancy in a transparent manner to end users. By leveraging Cassandra's existing capabilities the Service will be able to dynamically scale to tenant demand and provide high reliability. Co-locating multiple tenants on a given node within the cluster will provide better utilization of available resources than compared to giving each tenant their own cluster. No changes will be made that affect the operation of the defined CQL protocol; this is to ensure that all existing code can transparently use the Service without needing to actually be aware of the fact that it is.
+The Cassandra Service will provide multi-tenancy in a transparent manner to end users. By leveraging Cassandra's existing capabilities the Service will be able to dynamically scale to tenant demand and provide high reliability. Co-locating multiple tenants on a given node within the cluster will provide better utilization of available resources than compared to giving each tenant their own node. No changes will be made that affect the operation of the defined CQL protocol; this is to ensure that all existing code can transparently use the Service without needing to actually be aware of the fact that it is.
 
 The Service will support Cassandra 2.x and the CQL binary protocol, version 1. Previous versions of Cassandra and the deprecated legacy ``Thrift'' protocol are not supported.
 \end{abstract}
